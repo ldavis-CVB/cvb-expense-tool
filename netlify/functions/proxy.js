@@ -5,8 +5,14 @@ exports.handler = async (event) => {
   if (event.httpMethod !== 'POST') return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
 
   let payload;
-  try { payload = JSON.parse(event.body); }
-  catch (e) { return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid request body' }) }; }
+  try {
+    const rawBody = event.isBase64Encoded
+      ? Buffer.from(event.body, 'base64').toString('utf8')
+      : event.body;
+    payload = JSON.parse(rawBody);
+  } catch (e) {
+    return { statusCode: 400, headers, body: JSON.stringify({ error: 'Could not parse request: ' + e.message }) };
+  }
 
   const { action, data, mediaType } = payload;
 

@@ -272,7 +272,8 @@ function fileToBase64(file) {
 
 async function extractReceipt(item) {
   const base64    = await fileToBase64(item.file);
-  const mediaType = item.file.type || 'image/jpeg';
+  // After compression images are always JPEG; PDFs stay as-is
+  const mediaType = item.file.type === 'application/pdf' ? 'application/pdf' : 'image/jpeg';
 
   const res = await fetch('/.netlify/functions/proxy', {
     method: 'POST',
