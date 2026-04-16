@@ -122,10 +122,11 @@
 
   <div class="api-banner">
     <label>&#128273; Claude API Key:</label>
-    <input type="password" id="apiKey" placeholder="sk-ant-api03-..." />
+    <input type="password" id="apiKey" placeholder="sk-ant-api03-..." oninput="saveApiKey()" />
     <button class="btn btn-secondary" onclick="testApiKey()" id="testBtn">&#10003; Test Key</button>
+    <button class="btn btn-secondary" onclick="clearApiKey()" style="background:#fdecea;color:#c62828;">&#128465; Forget Key</button>
     <span class="hint">
-      Your key is never saved — only used in your browser to read receipts.
+      Your key is saved in this browser only — never sent to anyone except Anthropic.
       Get one at <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a>
       &nbsp;|&nbsp; <span id="keyStatus"></span>
     </span>
@@ -176,6 +177,25 @@
 <div class="toast" id="toast"></div>
 
 <script>
+// ── API Key persistence ───────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  const saved = localStorage.getItem('cvb_api_key');
+  if (saved) {
+    document.getElementById('apiKey').value = saved;
+    document.getElementById('keyStatus').innerHTML = '<span style="color:green;font-weight:700">&#10003; Key loaded from browser</span>';
+  }
+});
+function saveApiKey() {
+  const key = document.getElementById('apiKey').value.trim();
+  if (key) localStorage.setItem('cvb_api_key', key);
+}
+function clearApiKey() {
+  localStorage.removeItem('cvb_api_key');
+  document.getElementById('apiKey').value = '';
+  document.getElementById('keyStatus').innerHTML = '<span style="color:#888">Key cleared</span>';
+  showToast('API key forgotten','success');
+}
+
 // ── GL Code Rules ─────────────────────────────────────────────────
 const GL_RULES = [
   { keywords: ['verizon','intelepeer','phone','telecom','wireless'],                                          code: '200-700390', cat: 'Telephone' },
