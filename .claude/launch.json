@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "cvb-expense-tool",
+      "runtimeExecutable": "powershell",
+      "runtimeArgs": ["-Command", "Start-Process -NoNewWindow python -ArgumentList '-m http.server 3000' -WorkingDirectory 'C:/Users/LeeDavis/Documents/cvb-expense-tool'"],
+      "port": 3000
+    }
+  ]
+}

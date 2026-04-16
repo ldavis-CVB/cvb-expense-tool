@@ -263,8 +263,6 @@ async function extractReceipt(item) {
 }
 
 async function processAll() {
-  const apiKey = document.getElementById('apiKey').value.trim();
-  if (!apiKey) { showToast('Please enter your Claude API key first','error'); return; }
   const pending = fileQueue.filter(f => f.status === 'pending');
   if (!pending.length) { showToast('No new receipts to process','error'); return; }
 
