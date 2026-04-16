@@ -269,27 +269,14 @@ async function extractReceipt(item) {
     ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } }
     : { type: 'image',    source: { type: 'base64', media_type: mediaType,          data: base64 } };
 
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
+  const res = await fetch('/.netlify/functions/proxy', {
     method: 'POST',
-    headers: {
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json',
-      'anthropic-dangerous-client-side-api-key-disclosure': 'cvb-expense-tool'
-    },
-    body: JSON.stringify({
-      model: 'claude-opus-4-5',
-      max_tokens: 512,
-      messages: [{ role: 'user', content: [
-        contentBlock,
-        { type: 'text', text: 'Extract from this receipt and return ONLY valid JSON, no markdown: {"date":"MM/DD/YYYY","vendor":"merchant name","description":"brief description","amount":0.00}. Use null if not found.' }
-      ]}]
-    })
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ apiKey, action: 'extract', data: base64, mediaType })
   });
 
-  if (!res.ok) { const e = await res.json(); throw new Error(e.error?.message || `API error ${res.status}`); }
-  const data  = await res.json();
-  const text  = data.content[0].text.replace(/^```[a-z]*\n?/i,'').replace(/```$/,'').trim();
+  if (!res.ok) { const e = await res.json(); throw new Error(e.error || `API error ${res.status}`); }
+  const text = await res.text();
   return JSON.parse(text);
 }
 
@@ -485,14 +472,10 @@ async function testApiKey() {
   const btn = document.getElementById('testBtn');
   btn.disabled = true; btn.textContent = 'Testing...'; status.textContent = '';
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method:'POST',
-      headers:{
-        'x-api-key':apiKey,'anthropic-version':'2023-06-01',
-        'content-type':'application/json',
-        'anthropic-dangerous-client-side-api-key-disclosure':'cvb-expense-tool'
-      },
-      body: JSON.stringify({ model:'claude-opus-4-5', max_tokens:10, messages:[{role:'user',content:'Hi'}] })
+    const res = await fetch('/.netlify/functions/proxy', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ apiKey, action: 'test' })
     });
     if (res.ok) {
       status.innerHTML = '<span style="color:green;font-weight:700">&#10003; API key works!</span>';
