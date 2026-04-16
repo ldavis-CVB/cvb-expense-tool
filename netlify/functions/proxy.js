@@ -7,9 +7,10 @@ exports.handler = async (event) => {
   try { payload = JSON.parse(event.body); }
   catch { return { statusCode: 400, body: JSON.stringify({ error: 'Invalid JSON' }) }; }
 
-  const { apiKey, action, data, mediaType } = payload;
+  const { action, data, mediaType } = payload;
 
-  if (!apiKey) return { statusCode: 400, body: JSON.stringify({ error: 'No API key provided' }) };
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) return { statusCode: 500, body: JSON.stringify({ error: 'API key not configured on server' }) };
 
   // Build the Claude request body
   let claudeBody;
