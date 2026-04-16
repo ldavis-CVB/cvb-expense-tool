@@ -121,6 +121,13 @@
 <div class="container">
 
 
+  <div class="api-banner">
+    <label>&#128273; Claude API Key:</label>
+    <input type="password" id="apiKey" placeholder="sk-ant-api03-..." oninput="saveApiKey()" />
+    <button class="btn btn-secondary" onclick="clearApiKey()" style="background:#fdecea;color:#c62828;">&#128465; Forget Key</button>
+    <span class="hint">Saved in your browser only — never shared. Get a key at <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a> &nbsp;|&nbsp; <span id="keyStatus"></span></span>
+  </div>
+
   <div class="upload-zone" id="uploadZone">
     <div class="icon">&#128196;</div>
     <h2>Drop receipts here or click to browse</h2>
@@ -166,6 +173,15 @@
 <div class="toast" id="toast"></div>
 
 <script>
+// ── API Key ───────────────────────────────────────────────────────
+function getApiKey() { return localStorage.getItem('cvb_api_key') || ''; }
+window.addEventListener('DOMContentLoaded', () => {
+  const k = getApiKey();
+  if (k) { document.getElementById('apiKey').value = k; document.getElementById('keyStatus').textContent = '✓ Key saved'; }
+});
+function saveApiKey() { const k = document.getElementById('apiKey').value.trim(); if (k) localStorage.setItem('cvb_api_key', k); }
+function clearApiKey() { localStorage.removeItem('cvb_api_key'); document.getElementById('apiKey').value = ''; document.getElementById('keyStatus').textContent = 'Key cleared'; showToast('API key removed','success'); }
+
 // ── GL Code Rules ─────────────────────────────────────────────────
 const GL_RULES = [
   { keywords: ['verizon','intelepeer','phone','telecom','wireless'],                                          code: '200-700390', cat: 'Telephone' },
@@ -275,30 +291,41 @@ async function extractReceipt(item) {
   // After compression images are always JPEG; PDFs stay as-is
   const mediaType = item.file.type === 'application/pdf' ? 'application/pdf' : 'image/jpeg';
 
-  const res = await fetch('/.netlify/functions/proxy', {
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ action: 'extract', data: base64, mediaType })
+    headers: {
+      'x-api-key': getApiKey(),
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+      'anthropic-dangerous-client-side-api-key-disclosure': 'cvb-expense-tool'
+    },
+    body: JSON.stringify({
+      model: 'claude-opus-4-5',
+      max_tokens: 512,
+      messages: [{ role: 'user', content: [
+        mediaType === 'application/pdf'
+          ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } }
+          : { type: 'image',    source: { type: 'base64', media_type: mediaType,          data: base64 } },
+        { type: 'text', text: 'Extract from this receipt and return ONLY valid JSON, no markdown: {"date":"MM/DD/YYYY","vendor":"merchant name","description":"brief description","amount":0.00}. Use null if not found.' }
+      ]}]
+    })
   });
 
   const text = await res.text();
   if (!res.ok) {
-    let msg = `Server error ${res.status}`;
-    try { msg = JSON.parse(text).error || msg; } catch {}
+    let msg = `API error ${res.status}`;
+    try { msg = JSON.parse(text).error?.message || msg; } catch {}
     throw new Error(msg);
   }
 
-  // Try direct parse first
-  try { return JSON.parse(text); } catch {}
+  const result = JSON.parse(text);
+  const raw = result.content[0].text.replace(/^```[a-z]*\n?/i,'').replace(/```$/,'').trim();
 
-  // Extract JSON object from anywhere in the response
-  const match = text.match(/\{[\s\S]*\}/);
-  if (match) {
-    try { return JSON.parse(match[0]); } catch {}
-  }
+  try { return JSON.parse(raw); } catch {}
 
-  // Last resort — return partial data so the row still gets added
-  console.warn('Could not parse receipt response:', text);
+  const match = raw.match(/\{[\s\S]*\}/);
+  if (match) { try { return JSON.parse(match[0]); } catch {} }
+
   return { date: null, vendor: 'Unknown', description: 'Could not read receipt — please edit manually', amount: null };
 }
 
