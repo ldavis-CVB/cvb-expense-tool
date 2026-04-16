@@ -259,7 +259,19 @@ async function extractReceipt(item) {
 
   if (!res.ok) { const e = await res.json(); throw new Error(e.error || `API error ${res.status}`); }
   const text = await res.text();
-  return JSON.parse(text);
+
+  // Try direct parse first
+  try { return JSON.parse(text); } catch {}
+
+  // Extract JSON object from anywhere in the response
+  const match = text.match(/\{[\s\S]*\}/);
+  if (match) {
+    try { return JSON.parse(match[0]); } catch {}
+  }
+
+  // Last resort — return partial data so the row still gets added
+  console.warn('Could not parse receipt response:', text);
+  return { date: null, vendor: 'Unknown', description: 'Could not read receipt — please edit manually', amount: null };
 }
 
 async function processAll() {
