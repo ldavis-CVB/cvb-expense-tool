@@ -1,16 +1,17 @@
+const headers = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' };
+
 exports.handler = async (event) => {
-  if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: 'Method Not Allowed' };
-  }
+  if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers, body: '' };
+  if (event.httpMethod !== 'POST') return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
 
   let payload;
   try { payload = JSON.parse(event.body); }
-  catch { return { statusCode: 400, body: JSON.stringify({ error: 'Invalid JSON' }) }; }
+  catch (e) { return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid request body' }) }; }
 
   const { action, data, mediaType } = payload;
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return { statusCode: 500, body: JSON.stringify({ error: 'API key not configured on server' }) };
+  if (!apiKey) return { statusCode: 500, headers, body: JSON.stringify({ error: 'API key not configured — add ANTHROPIC_API_KEY in Netlify environment variables' }) };
 
   // Build the Claude request body
   let claudeBody;
@@ -55,13 +56,13 @@ exports.handler = async (event) => {
     }
 
     if (action === 'test') {
-      return { statusCode: 200, body: JSON.stringify({ status: 'ok' }) };
+      return { statusCode: 200, headers, body: JSON.stringify({ status: 'ok' }) };
     }
 
     const text = result.content[0].text.replace(/^```[a-z]*\n?/i,'').replace(/```$/,'').trim();
-    return { statusCode: 200, body: text };
+    return { statusCode: 200, headers, body: text };
 
   } catch (e) {
-    return { statusCode: 500, body: JSON.stringify({ error: e.message }) };
+    return { statusCode: 500, headers, body: JSON.stringify({ error: e.message || 'Unknown server error' }) };
   }
 };
