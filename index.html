@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CVB Expense Receipt Uploader</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx-style@0.8.13/dist/xlsx.full.min.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: Arial, sans-serif; background: #f0f2f5; color: #222; min-height: 100vh; }
@@ -363,104 +363,160 @@ function exportToExcel() {
   const wb = XLSX.utils.book_new();
   const ws = {};
 
-  // Helper to set a cell
-  function c(ref, v, opts={}) {
+  // Style definitions
+  const thin  = { style: 'thin',   color: { rgb: 'FF000000' } };
+  const thick = { style: 'medium', color: { rgb: 'FF000000' } };
+  const allThin   = { top: thin,  bottom: thin,  left: thin,  right: thin  };
+  const allThick  = { top: thick, bottom: thick, left: thick, right: thick };
+  const navyFill  = { fgColor: { rgb: 'FF1a3a6b' }, patternType: 'solid' };
+  const grayFill  = { fgColor: { rgb: 'FFd9d9d9' }, patternType: 'solid' };
+
+  function cell(ref, v, s={}) {
     const t = typeof v === 'number' ? 'n' : 's';
-    ws[ref] = { v, t, ...opts };
+    ws[ref] = { v, t, s };
   }
-  function bold(ref, v) { c(ref, v, { s:{ font:{ bold:true } } }); }
+
+  function hdr(ref, v, extraStyle={}) {
+    cell(ref, v, {
+      font: { bold: true, sz: 12, color: { rgb: 'FF000000' } },
+      border: allThin,
+      alignment: { horizontal: 'left', vertical: 'center', wrapText: true },
+      ...extraStyle
+    });
+  }
+
+  function colHdr(ref, v) {
+    cell(ref, v, {
+      font: { bold: true, sz: 11, color: { rgb: 'FFFFFFFF' } },
+      fill: navyFill,
+      border: allThick,
+      alignment: { horizontal: 'center', vertical: 'center' }
+    });
+  }
+
+  function data(ref, v, numFmt) {
+    const t = typeof v === 'number' ? 'n' : 's';
+    const s = {
+      font: { sz: 11 },
+      border: allThin,
+      alignment: { horizontal: typeof v === 'number' ? 'right' : 'left', vertical: 'center' }
+    };
+    if (numFmt) s.numFmt = numFmt;
+    ws[ref] = { v, t, s };
+  }
+
+  function summary(ref, v, bold=false, numFmt) {
+    const t = typeof v === 'number' ? 'n' : 's';
+    const s = {
+      font: { bold, sz: 11 },
+      fill: grayFill,
+      border: allThin,
+      alignment: { horizontal: typeof v === 'number' ? 'right' : 'left', vertical: 'center' }
+    };
+    if (numFmt) s.numFmt = numFmt;
+    ws[ref] = { v, t, s };
+  }
 
   // ── Row 1: Title ──────────────────────────────────────────────
-  bold('A1','Expense Report');
-
-  // ── Row 2: Org + Employee ─────────────────────────────────────
-  bold('A2','Wilmington & Beaches CVB');
-  bold('E2','Employee Name:');
-  c('G2','Lee Davis');
-
-  // ── Row 3: Purpose ───────────────────────────────────────────
-  bold('A3','Purpose of Travel:');
-
-  // ── Row 4: Period ─────────────────────────────────────────────
-  const month = expenses[0]?.month || new Date().toLocaleString('default',{month:'long'});
-  const year  = new Date().getFullYear();
-  bold('A4','Period Covered:');
-  c('C4',`${month} ${year}`);
-
-  // ── Row 6: Transportation header ─────────────────────────────
-  bold('C6','Transportation');
-
-  // ── Row 7: Column headers ─────────────────────────────────────
-  ['A7','B7','C7','D7','E7','F7','G7','H7'].forEach((ref,i) => {
-    bold(ref, ['Date','Explanation','Miles','Other','Hotel','Meals','Other','Total'][i]);
+  cell('A1','Expense Report',{
+    font:{ bold:true, sz:16, color:{ rgb:'FFFFFFFF' } },
+    fill: navyFill,
+    alignment:{ horizontal:'center', vertical:'center' }
   });
 
-  // ── Rows 8–31: Expense data ───────────────────────────────────
+  // ── Row 2 ─────────────────────────────────────────────────────
+  hdr('A2','Wilmington & Beaches CVB');
+  hdr('E2','Employee Name:');
+  hdr('G2','Lee Davis');
+
+  // ── Row 3 ─────────────────────────────────────────────────────
+  hdr('A3','Purpose of Travel:');
+
+  // ── Row 4 ─────────────────────────────────────────────────────
+  const month = expenses[0]?.month || new Date().toLocaleString('default',{month:'long'});
+  const year  = new Date().getFullYear();
+  hdr('A4','Period Covered:');
+  hdr('C4',`${month} ${year}`);
+
+  // ── Row 6: Transportation subheader ──────────────────────────
+  cell('C6','Transportation',{
+    font:{ bold:true, sz:11, color:{ rgb:'FFFFFFFF' } },
+    fill: navyFill,
+    border: allThick,
+    alignment:{ horizontal:'center', vertical:'center' }
+  });
+
+  // ── Row 7: Column headers ─────────────────────────────────────
+  ['Date','Explanation','Miles','Other','Hotel','Meals','Other','Total']
+    .forEach((h,i) => colHdr(String.fromCharCode(65+i)+'7', h));
+
+  // ── Rows 8–31: Data ───────────────────────────────────────────
   let totalHotel=0, totalMeals=0, totalOther=0, totalAll=0, totalCC=0;
+  const fmt = '"$"#,##0.00';
 
   expenses.slice(0,24).forEach((e,i) => {
     const r   = 8 + i;
     const amt = parseFloat(e.amount) || 0;
-    c(`A${r}`, e.date);
-    c(`B${r}`, `${e.vendor} - ${e.description}`);
-    if (e.gl==='200-700820') { c(`E${r}`, amt, {t:'n'}); totalHotel+=amt; }
-    else if (e.gl==='200-700810') { c(`F${r}`, amt, {t:'n'}); totalMeals+=amt; }
-    else { c(`G${r}`, amt, {t:'n'}); totalOther+=amt; }
-    c(`H${r}`, amt, {t:'n'});
+    data(`A${r}`, e.date);
+    data(`B${r}`, `${e.vendor} - ${e.description}`);
+    // Empty cells still get borders
+    ['C','D','E','F','G'].forEach(col => data(`${col}${r}`, ''));
+    if      (e.gl==='200-700820') { data(`E${r}`, amt, fmt); totalHotel+=amt; }
+    else if (e.gl==='200-700810') { data(`F${r}`, amt, fmt); totalMeals+=amt; }
+    else                          { data(`G${r}`, amt, fmt); totalOther+=amt; }
+    data(`H${r}`, amt, fmt);
     totalAll += amt;
     if ((e.payment||'Bureau CC')!=='Personal') totalCC+=amt;
   });
 
-  // ── Row 32: Visa charges label ────────────────────────────────
-  bold('B32','Visa Charges');
+  // ── Row 32: Visa ──────────────────────────────────────────────
+  summary('B32','Visa Charges', true);
 
-  // ── Row 33: Total miles ───────────────────────────────────────
-  bold('A33','$0.560');
-  bold('B33',' Total Miles');
+  // ── Row 33: Miles ─────────────────────────────────────────────
+  summary('A33','$0.560', true);
+  summary('B33',' Total Miles', true);
 
   // ── Row 34: Totals ────────────────────────────────────────────
-  bold('B34',' Total Amount');
-  c('E34', totalHotel, {t:'n'});
-  c('F34', totalMeals, {t:'n'});
-  c('G34', totalOther, {t:'n'});
-  c('H34', totalAll,   {t:'n'});
+  summary('B34',' Total Amount', true);
+  summary('E34', totalHotel, false, fmt);
+  summary('F34', totalMeals, false, fmt);
+  summary('G34', totalOther, false, fmt);
+  summary('H34', totalAll,   true,  fmt);
 
-  // ── Row 35–38: Payment summary ────────────────────────────────
-  bold('A35','Method of Payment:');
-  bold('D35','Advance Received:');   c('H35', 0, {t:'n'});
-  bold('A36','Bureau Credit Card Charge');
-  c('C36', totalCC, {t:'n'});
-  bold('D36','Deduct Expense on this Report:'); c('H36', 0, {t:'n'});
-  bold('A37','Personal: Cash/Check/CC');
-  bold('D37','Balance due CVB:');    c('H37', 0, {t:'n'});
-  bold('D38','Balance due Employee:');
+  // ── Rows 35–38: Payment ───────────────────────────────────────
+  hdr('A35','Method of Payment:');
+  hdr('D35','Advance Received:');   summary('H35', 0, false, fmt);
+  hdr('A36','Bureau Credit Card Charge');
+  summary('C36', totalCC, false, fmt);
+  hdr('D36','Deduct Expense on this Report:'); summary('H36', 0, false, fmt);
+  hdr('A37','Personal: Cash/Check/CC');
+  hdr('D37','Balance due CVB:');    summary('H37', 0, false, fmt);
+  hdr('D38','Balance due Employee:');
 
   // ── Rows 40–45: Signatures ────────────────────────────────────
-  bold('A40','I certify that the above expenses have');
-  bold('E40','Expense voucher audited by:  ');
-  bold('A41','Been incurred on behalf of the Cape');
-  bold('E41','Date__________________________');
-  bold('A42','Fear CVB:');
-  bold('A43','Employee__________________________');
-  bold('E43','Date___________________________');
-  bold('A44','Dept. Supervisor____________________');
-  bold('E44','Date___________________________');
-  bold('A45','President__________________________');
-  bold('E45','Date___________________________');
+  hdr('A40','I certify that the above expenses have');
+  hdr('E40','Expense voucher audited by:');
+  hdr('A41','Been incurred on behalf of the Cape');
+  hdr('E41','Date__________________________');
+  hdr('A42','Fear CVB:');
+  hdr('A43','Employee__________________________');
+  hdr('E43','Date___________________________');
+  hdr('A44','Dept. Supervisor____________________');
+  hdr('E44','Date___________________________');
+  hdr('A45','President__________________________');
+  hdr('E45','Date___________________________');
 
-  // ── Sheet range & column widths ───────────────────────────────
-  ws['!ref'] = 'A1:H45';
+  // ── Sheet settings ────────────────────────────────────────────
+  ws['!ref']  = 'A1:H45';
   ws['!cols'] = [{wch:18},{wch:38},{wch:10},{wch:12},{wch:10},{wch:10},{wch:10},{wch:12}];
-  ws['!rows'] = Array(45).fill({hpt:21});
-
-  // Merge cells to match template
+  ws['!rows'] = Array(45).fill({hpt:20});
   ws['!merges'] = [
-    {s:{r:0,c:0},e:{r:0,c:7}},  // A1:H1 title
-    {s:{r:5,c:2},e:{r:5,c:4}},  // C6:E6 transportation
+    {s:{r:0,c:0},e:{r:0,c:7}},  // A1:H1
+    {s:{r:5,c:2},e:{r:5,c:4}},  // C6:E6
   ];
 
   XLSX.utils.book_append_sheet(wb, ws, 'Expense Report');
-  XLSX.writeFile(wb, `Expense Report - ${month} ${year}.xlsx`);
+  XLSX.writeFile(wb, `Expense Report - ${month} ${year}.xlsx`, { bookSST: false, type: 'binary' });
   showToast(`Downloaded: Expense Report - ${month} ${year}.xlsx`, 'success');
 }
 
