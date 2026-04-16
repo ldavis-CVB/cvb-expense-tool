@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CVB Expense Receipt Uploader</title>
-<script src="https://cdn.jsdelivr.net/npm/xlsx-style@0.8.13/dist/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: Arial, sans-serif; background: #f0f2f5; color: #222; min-height: 100vh; }
@@ -499,16 +499,7 @@ function exportToExcel() {
 
   const filename = `Expense Report - ${month} ${year}.xlsx`;
   try {
-    // xlsx-style write method
-    const wbout = XLSX.write(wb, { bookType: 'xlsx', bookSST: false, type: 'binary' });
-    const buf   = new ArrayBuffer(wbout.length);
-    const view  = new Uint8Array(buf);
-    for (let i = 0; i < wbout.length; i++) view[i] = wbout.charCodeAt(i) & 0xFF;
-    const blob  = new Blob([buf], { type: 'application/octet-stream' });
-    const url   = URL.createObjectURL(blob);
-    const a     = document.createElement('a');
-    a.href = url; a.download = filename; a.click();
-    URL.revokeObjectURL(url);
+    XLSX.writeFile(wb, filename);
     showToast(`Downloaded: ${filename}`, 'success');
   } catch(e) {
     showToast('Export error: ' + e.message, 'error');
