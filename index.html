@@ -516,8 +516,23 @@ function exportToExcel() {
   ];
 
   XLSX.utils.book_append_sheet(wb, ws, 'Expense Report');
-  XLSX.writeFile(wb, `Expense Report - ${month} ${year}.xlsx`, { bookSST: false, type: 'binary' });
-  showToast(`Downloaded: Expense Report - ${month} ${year}.xlsx`, 'success');
+
+  const filename = `Expense Report - ${month} ${year}.xlsx`;
+  try {
+    // xlsx-style write method
+    const wbout = XLSX.write(wb, { bookType: 'xlsx', bookSST: false, type: 'binary' });
+    const buf   = new ArrayBuffer(wbout.length);
+    const view  = new Uint8Array(buf);
+    for (let i = 0; i < wbout.length; i++) view[i] = wbout.charCodeAt(i) & 0xFF;
+    const blob  = new Blob([buf], { type: 'application/octet-stream' });
+    const url   = URL.createObjectURL(blob);
+    const a     = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+    showToast(`Downloaded: ${filename}`, 'success');
+  } catch(e) {
+    showToast('Export error: ' + e.message, 'error');
+  }
 }
 
 // ── Test API Key ──────────────────────────────────────────────────
