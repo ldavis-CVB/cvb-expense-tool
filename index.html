@@ -281,9 +281,14 @@ async function processAll() {
       addExpenseRow({ date: extracted.date || today(), vendor, description: desc, amount: extracted.amount || 0, gl: gl.code, cat: gl.cat, month: getMonth(extracted.date) });
     } catch(err) {
       item.status = 'error'; item.error = err.message; renderQueue();
-      showToast(`Error on ${item.file.name}: ${err.message}`, 'error');
+      showToast(`Error: ${err.message}`, 'error');
+      // If rate limited, stop processing remaining receipts
+      if (err.message.toLowerCase().includes('rate') || err.message.includes('529') || err.message.includes('limit')) {
+        document.getElementById('processStatus').textContent = 'Rate limited — wait 30 seconds and try again';
+        break;
+      }
     }
-    if (i < pending.length - 1) await sleep(800);
+    if (i < pending.length - 1) await sleep(2000);
   }
 
   document.getElementById('processBtn').disabled = false;
