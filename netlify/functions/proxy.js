@@ -44,11 +44,8 @@ exports.handler = async (event) => {
     };
   }
 
-  // Use node https module as fallback if fetch unavailable
-  const doFetch = typeof fetch !== 'undefined' ? fetch : require('node-fetch').default;
-
   try {
-    const res = await doFetch('https://api.anthropic.com/v1/messages', {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'x-api-key': apiKey,
