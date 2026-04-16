@@ -19,18 +19,6 @@
 
   .container { max-width: 1200px; margin: 0 auto; padding: 28px 24px; }
 
-  .api-banner {
-    background: #fff8e1; border: 1px solid #f9a825; border-radius: 10px;
-    padding: 16px 20px; margin-bottom: 24px;
-    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
-  }
-  .api-banner label { font-weight: 600; font-size: 0.9rem; white-space: nowrap; }
-  .api-banner input {
-    flex: 1; min-width: 260px; padding: 8px 12px;
-    border: 1px solid #ddd; border-radius: 6px; font-size: 0.9rem; font-family: monospace;
-  }
-  .api-banner .hint { font-size: 0.8rem; color: #888; width: 100%; margin-top: 4px; }
-
   .upload-zone {
     background: white; border: 2.5px dashed #1a3a6b; border-radius: 14px;
     padding: 48px 24px; text-align: center; cursor: pointer;
@@ -121,13 +109,6 @@
 <div class="container">
 
 
-  <div class="api-banner">
-    <label>&#128273; Claude API Key:</label>
-    <input type="password" id="apiKey" placeholder="sk-ant-api03-..." oninput="saveApiKey()" />
-    <button class="btn btn-secondary" onclick="clearApiKey()" style="background:#fdecea;color:#c62828;">&#128465; Forget Key</button>
-    <span class="hint">Saved in your browser only — never shared. Get a key at <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a> &nbsp;|&nbsp; <span id="keyStatus"></span></span>
-  </div>
-
   <div class="upload-zone" id="uploadZone">
     <div class="icon">&#128196;</div>
     <h2>Drop receipts here or click to browse</h2>
@@ -173,15 +154,6 @@
 <div class="toast" id="toast"></div>
 
 <script>
-// ── API Key ───────────────────────────────────────────────────────
-function getApiKey() { return localStorage.getItem('cvb_api_key') || ''; }
-window.addEventListener('DOMContentLoaded', () => {
-  const k = getApiKey();
-  if (k) { document.getElementById('apiKey').value = k; document.getElementById('keyStatus').textContent = '✓ Key saved'; }
-});
-function saveApiKey() { const k = document.getElementById('apiKey').value.trim(); if (k) localStorage.setItem('cvb_api_key', k); }
-function clearApiKey() { localStorage.removeItem('cvb_api_key'); document.getElementById('apiKey').value = ''; document.getElementById('keyStatus').textContent = 'Key cleared'; showToast('API key removed','success'); }
-
 // ── GL Code Rules ─────────────────────────────────────────────────
 const GL_RULES = [
   { keywords: ['verizon','intelepeer','phone','telecom','wireless'],                                          code: '200-700390', cat: 'Telephone' },
@@ -291,39 +263,23 @@ async function extractReceipt(item) {
   // After compression images are always JPEG; PDFs stay as-is
   const mediaType = item.file.type === 'application/pdf' ? 'application/pdf' : 'image/jpeg';
 
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
+  const res = await fetch('/api/proxy', {
     method: 'POST',
-    headers: {
-      'x-api-key': getApiKey(),
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json',
-      'anthropic-dangerous-client-side-api-key-disclosure': 'cvb-expense-tool'
-    },
-    body: JSON.stringify({
-      model: 'claude-opus-4-5',
-      max_tokens: 512,
-      messages: [{ role: 'user', content: [
-        mediaType === 'application/pdf'
-          ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } }
-          : { type: 'image',    source: { type: 'base64', media_type: mediaType,          data: base64 } },
-        { type: 'text', text: 'Extract from this receipt and return ONLY valid JSON, no markdown: {"date":"MM/DD/YYYY","vendor":"merchant name","description":"brief description","amount":0.00}. Use null if not found.' }
-      ]}]
-    })
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ action: 'extract', data: base64, mediaType })
   });
 
   const text = await res.text();
   if (!res.ok) {
-    let msg = `API error ${res.status}`;
-    try { msg = JSON.parse(text).error?.message || msg; } catch {}
+    let msg = `Server error ${res.status}`;
+    try { msg = JSON.parse(text).error || msg; } catch {}
     throw new Error(msg);
   }
 
-  const result = JSON.parse(text);
-  const raw = result.content[0].text.replace(/^```[a-z]*\n?/i,'').replace(/```$/,'').trim();
+  // Proxy already strips Claude wrapper and returns clean JSON text
+  try { return JSON.parse(text); } catch {}
 
-  try { return JSON.parse(raw); } catch {}
-
-  const match = raw.match(/\{[\s\S]*\}/);
+  const match = text.match(/\{[\s\S]*\}/);
   if (match) { try { return JSON.parse(match[0]); } catch {} }
 
   return { date: null, vendor: 'Unknown', description: 'Could not read receipt — please edit manually', amount: null };
@@ -477,35 +433,6 @@ function exportToExcel() {
   } catch(e) {
     showToast('Export error: ' + e.message, 'error');
   }
-}
-
-// ── Test API Key ──────────────────────────────────────────────────
-async function testApiKey() {
-  const apiKey = document.getElementById('apiKey').value.trim();
-  const status = document.getElementById('keyStatus');
-  if (!apiKey) { showToast('Please paste your API key first','error'); return; }
-  const btn = document.getElementById('testBtn');
-  btn.disabled = true; btn.textContent = 'Testing...'; status.textContent = '';
-  try {
-    const res = await fetch('/.netlify/functions/proxy', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ apiKey, action: 'test' })
-    });
-    if (res.ok) {
-      status.innerHTML = '<span style="color:green;font-weight:700">&#10003; API key works!</span>';
-      showToast('API key is valid!','success');
-    } else {
-      const e = await res.json();
-      const m = e.error?.message||`Error ${res.status}`;
-      status.innerHTML = `<span style="color:red;font-weight:700">&#10007; ${m}</span>`;
-      showToast(m,'error');
-    }
-  } catch(e) {
-    status.innerHTML = `<span style="color:red;font-weight:700">&#10007; ${e.message}</span>`;
-    showToast(e.message,'error');
-  }
-  btn.disabled=false; btn.textContent='✓ Test Key';
 }
 
 // ── Toast ─────────────────────────────────────────────────────────
