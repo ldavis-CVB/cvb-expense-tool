@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CVB Expense Receipt Uploader</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; background: #f0f2f5; color: #222; min-height: 100vh; }
+
+  header {
+    background: #1a3a6b; color: white;
+    padding: 18px 32px; display: flex; align-items: center; gap: 16px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  }
+  header h1 { font-size: 1.4rem; font-weight: 700; }
+  header p  { font-size: 0.85rem; opacity: 0.8; margin-top: 2px; }
+
+  .container { max-width: 1200px; margin: 0 auto; padding: 28px 24px; }
+
+  .api-banner {
+    background: #fff8e1; border: 1px solid #f9a825; border-radius: 10px;
+    padding: 16px 20px; margin-bottom: 24px;
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  }
+  .api-banner label { font-weight: 600; font-size: 0.9rem; white-space: nowrap; }
+  .api-banner input {
+    flex: 1; min-width: 260px; padding: 8px 12px;
+    border: 1px solid #ddd; border-radius: 6px; font-size: 0.9rem; font-family: monospace;
+  }
+  .api-banner .hint { font-size: 0.8rem; color: #888; width: 100%; margin-top: 4px; }
+
+  .upload-zone {
+    background: white; border: 2.5px dashed #1a3a6b; border-radius: 14px;
+    padding: 48px 24px; text-align: center; cursor: pointer;
+    transition: all 0.2s; margin-bottom: 28px;
+  }
+  .upload-zone:hover, .upload-zone.drag-over { background: #e8f0fe; border-color: #1557b0; }
+  .upload-zone .icon { font-size: 3rem; margin-bottom: 12px; }
+  .upload-zone h2 { font-size: 1.2rem; color: #1a3a6b; margin-bottom: 6px; }
+  .upload-zone p  { font-size: 0.88rem; color: #666; }
+  .upload-zone input[type="file"] { display: none; }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 10px 20px; border: none; border-radius: 8px;
+    font-size: 0.9rem; font-weight: 600; cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn-primary   { background: #1a3a6b; color: white; }
+  .btn-primary:hover   { background: #1557b0; }
+  .btn-success   { background: #2e7d32; color: white; }
+  .btn-success:hover   { background: #388e3c; }
+  .btn-secondary { background: #eee; color: #333; }
+  .btn-secondary:hover { background: #ddd; }
+  .btn:disabled  { opacity: 0.5; cursor: not-allowed; }
+
+  .queue-section { margin-bottom: 28px; }
+  .queue-section h3 { font-size: 1rem; font-weight: 700; color: #1a3a6b; margin-bottom: 12px; }
+  .queue-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px,1fr)); gap: 12px; margin-bottom: 16px; }
+
+  .queue-item {
+    background: white; border-radius: 10px; padding: 12px; text-align: center;
+    position: relative; box-shadow: 0 1px 4px rgba(0,0,0,0.1); border: 2px solid transparent;
+  }
+  .queue-item.processing { border-color: #f9a825; }
+  .queue-item.done       { border-color: #2e7d32; }
+  .queue-item.error      { border-color: #c62828; }
+  .queue-item .thumb { width:80px;height:80px;object-fit:cover;border-radius:6px;margin:0 auto 8px;display:block;background:#f0f2f5; }
+  .queue-item .file-icon { width:80px;height:80px;margin:0 auto 8px;display:flex;align-items:center;justify-content:center;font-size:2.5rem;background:#f0f2f5;border-radius:6px; }
+  .queue-item .name { font-size:0.72rem;color:#555;word-break:break-all;line-height:1.3; }
+  .queue-item .status { font-size:0.7rem;font-weight:700;margin-top:4px; }
+  .queue-item .error-msg { font-size:0.68rem;color:#c62828;margin-top:4px;word-break:break-word;line-height:1.3; }
+  .queue-item .remove-btn { position:absolute;top:4px;right:4px;background:#e53935;color:white;border:none;border-radius:50%;width:20px;height:20px;font-size:0.7rem;cursor:pointer;display:flex;align-items:center;justify-content:center; }
+
+  .process-bar { display:flex;gap:10px;align-items:center;flex-wrap:wrap; }
+
+  .table-section { background:white;border-radius:14px;padding:24px;box-shadow:0 1px 6px rgba(0,0,0,0.08); }
+  .table-header { display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:10px; }
+  .table-header h3 { font-size:1rem;font-weight:700;color:#1a3a6b; }
+  .table-wrapper { overflow-x:auto; }
+
+  table { width:100%;border-collapse:collapse;font-size:0.85rem;min-width:800px; }
+  thead th { background:#1a3a6b;color:white;padding:10px 12px;text-align:left;font-weight:600;white-space:nowrap; }
+  tbody tr { border-bottom:1px solid #eee; }
+  tbody tr:hover { background:#f8f9ff; }
+  tbody td { padding:8px 10px;vertical-align:middle; }
+  tbody td input, tbody td select { width:100%;padding:5px 8px;border:1px solid #ddd;border-radius:5px;font-size:0.82rem;font-family:Arial,sans-serif;background:white; }
+  tbody td input:focus, tbody td select:focus { outline:none;border-color:#1a3a6b; }
+  td.amount-cell input { text-align:right; }
+  .delete-row { background:none;border:none;color:#c62828;cursor:pointer;font-size:1rem;padding:4px; }
+  .delete-row:hover { color:#e53935; }
+  .empty-state { text-align:center;padding:40px;color:#aaa;font-size:0.9rem; }
+
+  .toast {
+    position:fixed;bottom:28px;right:28px;background:#1a3a6b;color:white;
+    padding:14px 22px;border-radius:10px;font-size:0.9rem;
+    box-shadow:0 4px 16px rgba(0,0,0,0.2);z-index:9999;
+    opacity:0;transform:translateY(10px);transition:all 0.3s;max-width:340px;
+  }
+  .toast.show { opacity:1;transform:translateY(0); }
+  .toast.success { background:#2e7d32; }
+  .toast.error   { background:#c62828; }
+
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .spinner { display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,0.4);border-top-color:white;border-radius:50%;animation:spin 0.7s linear infinite;vertical-align:middle; }
+  .month-badge { display:inline-block;background:#e8f0fe;color:#1a3a6b;border-radius:12px;padding:2px 10px;font-size:0.75rem;font-weight:600; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>&#128196; CVB Expense Receipt Uploader</h1>
+    <p>Wilmington &amp; Beaches Convention &amp; Visitors Bureau</p>
+  </div>
+</header>
+
+<div class="container">
+
+  <div class="api-banner">
+    <label>&#128273; Claude API Key:</label>
+    <input type="password" id="apiKey" placeholder="sk-ant-api03-..." />
+    <button class="btn btn-secondary" onclick="testApiKey()" id="testBtn">&#10003; Test Key</button>
+    <span class="hint">
+      Your key is never saved — only used in your browser to read receipts.
+      Get one at <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a>
+      &nbsp;|&nbsp; <span id="keyStatus"></span>
+    </span>
+  </div>
+
+  <div class="upload-zone" id="uploadZone">
+    <div class="icon">&#128196;</div>
+    <h2>Drop receipts here or click to browse</h2>
+    <p>Supports JPG, PNG, PDF &mdash; upload multiple at once</p>
+    <input type="file" id="fileInput" multiple accept="image/*,.pdf" />
+  </div>
+
+  <div class="queue-section" id="queueSection" style="display:none">
+    <h3>&#128247; Uploaded Receipts (<span id="queueCount">0</span>)</h3>
+    <div class="queue-grid" id="queueGrid"></div>
+    <div class="process-bar">
+      <button class="btn btn-primary" id="processBtn" onclick="processAll()">&#129302; Extract All Receipts with AI</button>
+      <button class="btn btn-secondary" onclick="clearQueue()">Clear Queue</button>
+      <span id="processStatus" style="font-size:0.85rem;color:#666;"></span>
+    </div>
+  </div>
+
+  <div class="table-section">
+    <div class="table-header">
+      <h3>&#128203; Expense Entries (<span id="rowCount">0</span>)</h3>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn btn-secondary" onclick="addBlankRow()">+ Add Row Manually</button>
+        <button class="btn btn-success" onclick="exportToExcel()" id="exportBtn">&#128229; Export Expense Report</button>
+      </div>
+    </div>
+    <div class="table-wrapper">
+      <table id="expenseTable">
+        <thead>
+          <tr>
+            <th>Date</th><th>Vendor</th><th>Description</th>
+            <th>Amount ($)</th><th>Category</th><th>GL Code</th>
+            <th>Payment</th><th>Month</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="expenseBody">
+          <tr><td colspan="9" class="empty-state">Upload receipts above to get started</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── GL Code Rules ─────────────────────────────────────────────────
+const GL_RULES = [
+  { keywords: ['verizon','intelepeer','phone','telecom','wireless'],                                          code: '200-700390', cat: 'Telephone' },
+  { keywords: ['canva','claude','otter','adobe','microsoft','software','subscription','saas'],                code: '200-700875', cat: 'Software / Subscriptions' },
+  { keywords: ['shell','sheetz','bp','exxon','chevron','mobil','gas','fuel','gasoline'],                      code: '200-700905', cat: 'Travel - Gas' },
+  { keywords: ['amazon','walmart','staples','office depot','scanner','speaker','supplies','equipment','asset'],code: '100-700520', cat: 'Equipment / Supplies' },
+  { keywords: ['hotel','marriott','hilton','hyatt','hampton','inn','suites','lodging'],                       code: '200-700820', cat: 'Hotel / Lodging' },
+  { keywords: ['meal','lunch','dinner','breakfast','restaurant','cafe','coffee','doordash','grubhub','ubereats','jimmy','eddison','skyline'], code: '200-700810', cat: 'Meals & Entertainment' },
+];
+
+const GL_OPTIONS = [
+  { code: '200-700810', label: 'Meals & Entertainment' },
+  { code: '200-700875', label: 'Software / Subscriptions' },
+  { code: '200-700905', label: 'Travel - Gas' },
+  { code: '200-700390', label: 'Telephone' },
+  { code: '100-700520', label: 'Equipment / Supplies' },
+  { code: '200-700820', label: 'Hotel / Lodging' },
+];
+
+function getGL(vendor, description) {
+  const text = (vendor + ' ' + description).toLowerCase();
+  for (const rule of GL_RULES) {
+    if (rule.keywords.some(k => text.includes(k))) return { code: rule.code, cat: rule.cat };
+  }
+  return { code: '200-700810', cat: 'Meals & Entertainment' };
+}
+
+// ── File Queue ────────────────────────────────────────────────────
+let fileQueue = [];
+let expenses  = [];
+
+const uploadZone = document.getElementById('uploadZone');
+const fileInput  = document.getElementById('fileInput');
+
+uploadZone.addEventListener('click', () => fileInput.click());
+uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+uploadZone.addEventListener('drop', e => { e.preventDefault(); uploadZone.classList.remove('drag-over'); handleFiles([...e.dataTransfer.files]); });
+fileInput.addEventListener('change', e => handleFiles([...e.target.files]));
+
+function handleFiles(files) {
+  files.forEach(f => {
+    if (!fileQueue.find(q => q.file.name === f.name && q.file.size === f.size))
+      fileQueue.push({ file: f, status: 'pending', id: Date.now() + Math.random() });
+  });
+  renderQueue();
+}
+
+function renderQueue() {
+  const section = document.getElementById('queueSection');
+  const grid    = document.getElementById('queueGrid');
+  document.getElementById('queueCount').textContent = fileQueue.length;
+  if (fileQueue.length === 0) { section.style.display = 'none'; return; }
+  section.style.display = 'block';
+  grid.innerHTML = fileQueue.map((item, idx) => {
+    const isPDF = item.file.type === 'application/pdf';
+    const thumb = isPDF ? `<div class="file-icon">&#128196;</div>` : `<img class="thumb" src="${URL.createObjectURL(item.file)}" alt="receipt" />`;
+    const statusText = { pending:'', processing:'&#9203; Reading...', done:'&#10003; Done', error:'&#10007; Error' }[item.status] || '';
+    const errorMsg   = item.status === 'error' ? `<div class="error-msg">${item.error||'Unknown error'}</div>` : '';
+    return `<div class="queue-item ${item.status}">
+      <button class="remove-btn" onclick="removeFile(${idx})">&times;</button>
+      ${thumb}
+      <div class="name">${item.file.name}</div>
+      <div class="status">${statusText}</div>${errorMsg}
+    </div>`;
+  }).join('');
+}
+
+function removeFile(idx) { fileQueue.splice(idx,1); renderQueue(); }
+function clearQueue()    { fileQueue = []; renderQueue(); }
+
+// ── AI Extraction ─────────────────────────────────────────────────
+function fileToBase64(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload  = () => res(r.result.split(',')[1]);
+    r.onerror = rej;
+    r.readAsDataURL(file);
+  });
+}
+
+async function extractReceipt(item) {
+  const apiKey = document.getElementById('apiKey').value.trim();
+  if (!apiKey) throw new Error('No API key entered');
+
+  const base64    = await fileToBase64(item.file);
+  const isPDF     = item.file.type === 'application/pdf';
+  const mediaType = item.file.type || 'image/jpeg';
+
+  const contentBlock = isPDF
+    ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: base64 } }
+    : { type: 'image',    source: { type: 'base64', media_type: mediaType,          data: base64 } };
+
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'content-type': 'application/json',
+      'anthropic-dangerous-client-side-api-key-disclosure': 'cvb-expense-tool'
+    },
+    body: JSON.stringify({
+      model: 'claude-opus-4-5',
+      max_tokens: 512,
+      messages: [{ role: 'user', content: [
+        contentBlock,
+        { type: 'text', text: 'Extract from this receipt and return ONLY valid JSON, no markdown: {"date":"MM/DD/YYYY","vendor":"merchant name","description":"brief description","amount":0.00}. Use null if not found.' }
+      ]}]
+    })
+  });
+
+  if (!res.ok) { const e = await res.json(); throw new Error(e.error?.message || `API error ${res.status}`); }
+  const data  = await res.json();
+  const text  = data.content[0].text.replace(/^```[a-z]*\n?/i,'').replace(/```$/,'').trim();
+  return JSON.parse(text);
+}
+
+async function processAll() {
+  const apiKey = document.getElementById('apiKey').value.trim();
+  if (!apiKey) { showToast('Please enter your Claude API key first','error'); return; }
+  const pending = fileQueue.filter(f => f.status === 'pending');
+  if (!pending.length) { showToast('No new receipts to process','error'); return; }
+
+  document.getElementById('processBtn').disabled = true;
+
+  for (let i = 0; i < pending.length; i++) {
+    const item = pending[i];
+    document.getElementById('processStatus').textContent = `Processing ${i+1} of ${pending.length}...`;
+    item.status = 'processing'; renderQueue();
+    try {
+      const extracted = await extractReceipt(item);
+      item.status = 'done'; renderQueue();
+      const vendor = extracted.vendor || item.file.name;
+      const desc   = extracted.description || '';
+      const gl     = getGL(vendor, desc);
+      addExpenseRow({ date: extracted.date || today(), vendor, description: desc, amount: extracted.amount || 0, gl: gl.code, cat: gl.cat, month: getMonth(extracted.date) });
+    } catch(err) {
+      item.status = 'error'; item.error = err.message; renderQueue();
+      showToast(`Error on ${item.file.name}: ${err.message}`, 'error');
+    }
+    if (i < pending.length - 1) await sleep(800);
+  }
+
+  document.getElementById('processBtn').disabled = false;
+  document.getElementById('processStatus').textContent = 'Done!';
+  showToast(`${pending.filter(f=>f.status==='done').length} receipts extracted`, 'success');
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+function today()   { return new Date().toLocaleDateString('en-US'); }
+function getMonth(d) { try { return new Date(d).toLocaleString('default',{month:'long'}); } catch { return ''; } }
+
+// ── Expense Table ─────────────────────────────────────────────────
+function glSelect(selected) {
+  return `<select onchange="updateGL(this)">${GL_OPTIONS.map(g=>`<option value="${g.code}"${g.code===selected?' selected':''}>${g.code} — ${g.label}</option>`).join('')}</select>`;
+}
+
+function addExpenseRow(data) { expenses.push(data); renderTable(); }
+
+function addBlankRow() {
+  addExpenseRow({ date: today(), vendor:'', description:'', amount:'', gl:'200-700810', cat:'Meals & Entertainment', month: getMonth(today()) });
+}
+
+function deleteRow(idx) { expenses.splice(idx,1); renderTable(); }
+
+function renderTable() {
+  const tbody = document.getElementById('expenseBody');
+  document.getElementById('rowCount').textContent = expenses.length;
+  if (!expenses.length) { tbody.innerHTML = '<tr><td colspan="9" class="empty-state">No expense entries yet</td></tr>'; return; }
+  tbody.innerHTML = expenses.map((e,i) => `
+    <tr>
+      <td><input type="text" value="${esc(e.date)}" onchange="expenses[${i}].date=this.value;expenses[${i}].month=getMonth(this.value)" style="width:105px"/></td>
+      <td><input type="text" value="${esc(e.vendor)}" onchange="expenses[${i}].vendor=this.value"/></td>
+      <td><input type="text" value="${esc(e.description)}" onchange="expenses[${i}].description=this.value"/></td>
+      <td class="amount-cell"><input type="number" step="0.01" value="${e.amount}" onchange="expenses[${i}].amount=parseFloat(this.value)||0" style="width:90px"/></td>
+      <td>${glSelect(e.gl)}</td>
+      <td style="font-size:0.78rem;color:#555">${e.gl}</td>
+      <td><select onchange="expenses[${i}].payment=this.value">
+        <option${(e.payment||'Bureau CC')==='Bureau CC'?' selected':''}>Bureau CC</option>
+        <option${(e.payment||'')==='Personal'?' selected':''}>Personal</option>
+      </select></td>
+      <td><span class="month-badge">${e.month||''}</span></td>
+      <td><button class="delete-row" onclick="deleteRow(${i})">&#128465;</button></td>
+    </tr>`).join('');
+}
+
+function updateGL(sel) {
+  const idx = [...document.getElementById('expenseBody').rows].indexOf(sel.closest('tr'));
+  if (idx>=0) { expenses[idx].gl=sel.value; const o=GL_OPTIONS.find(g=>g.code===sel.value); expenses[idx].cat=o?o.label:''; renderTable(); }
+}
+
+function esc(s) { return (s||'').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ── Export — mirrors Blank expense report template ────────────────
+function exportToExcel() {
+  if (!expenses.length) { showToast('No expenses to export','error'); return; }
+
+  const wb = XLSX.utils.book_new();
+  const ws = {};
+
+  // Helper to set a cell
+  function c(ref, v, opts={}) {
+    const t = typeof v === 'number' ? 'n' : 's';
+    ws[ref] = { v, t, ...opts };
+  }
+  function bold(ref, v) { c(ref, v, { s:{ font:{ bold:true } } }); }
+
+  // ── Row 1: Title ──────────────────────────────────────────────
+  bold('A1','Expense Report');
+
+  // ── Row 2: Org + Employee ─────────────────────────────────────
+  bold('A2','Wilmington & Beaches CVB');
+  bold('E2','Employee Name:');
+  c('G2','Lee Davis');
+
+  // ── Row 3: Purpose ───────────────────────────────────────────
+  bold('A3','Purpose of Travel:');
+
+  // ── Row 4: Period ─────────────────────────────────────────────
+  const month = expenses[0]?.month || new Date().toLocaleString('default',{month:'long'});
+  const year  = new Date().getFullYear();
+  bold('A4','Period Covered:');
+  c('C4',`${month} ${year}`);
+
+  // ── Row 6: Transportation header ─────────────────────────────
+  bold('C6','Transportation');
+
+  // ── Row 7: Column headers ─────────────────────────────────────
+  ['A7','B7','C7','D7','E7','F7','G7','H7'].forEach((ref,i) => {
+    bold(ref, ['Date','Explanation','Miles','Other','Hotel','Meals','Other','Total'][i]);
+  });
+
+  // ── Rows 8–31: Expense data ───────────────────────────────────
+  let totalHotel=0, totalMeals=0, totalOther=0, totalAll=0, totalCC=0;
+
+  expenses.slice(0,24).forEach((e,i) => {
+    const r   = 8 + i;
+    const amt = parseFloat(e.amount) || 0;
+    c(`A${r}`, e.date);
+    c(`B${r}`, `${e.vendor} - ${e.description}`);
+    if (e.gl==='200-700820') { c(`E${r}`, amt, {t:'n'}); totalHotel+=amt; }
+    else if (e.gl==='200-700810') { c(`F${r}`, amt, {t:'n'}); totalMeals+=amt; }
+    else { c(`G${r}`, amt, {t:'n'}); totalOther+=amt; }
+    c(`H${r}`, amt, {t:'n'});
+    totalAll += amt;
+    if ((e.payment||'Bureau CC')!=='Personal') totalCC+=amt;
+  });
+
+  // ── Row 32: Visa charges label ────────────────────────────────
+  bold('B32','Visa Charges');
+
+  // ── Row 33: Total miles ───────────────────────────────────────
+  bold('A33','$0.560');
+  bold('B33',' Total Miles');
+
+  // ── Row 34: Totals ────────────────────────────────────────────
+  bold('B34',' Total Amount');
+  c('E34', totalHotel, {t:'n'});
+  c('F34', totalMeals, {t:'n'});
+  c('G34', totalOther, {t:'n'});
+  c('H34', totalAll,   {t:'n'});
+
+  // ── Row 35–38: Payment summary ────────────────────────────────
+  bold('A35','Method of Payment:');
+  bold('D35','Advance Received:');   c('H35', 0, {t:'n'});
+  bold('A36','Bureau Credit Card Charge');
+  c('C36', totalCC, {t:'n'});
+  bold('D36','Deduct Expense on this Report:'); c('H36', 0, {t:'n'});
+  bold('A37','Personal: Cash/Check/CC');
+  bold('D37','Balance due CVB:');    c('H37', 0, {t:'n'});
+  bold('D38','Balance due Employee:');
+
+  // ── Rows 40–45: Signatures ────────────────────────────────────
+  bold('A40','I certify that the above expenses have');
+  bold('E40','Expense voucher audited by:  ');
+  bold('A41','Been incurred on behalf of the Cape');
+  bold('E41','Date__________________________');
+  bold('A42','Fear CVB:');
+  bold('A43','Employee__________________________');
+  bold('E43','Date___________________________');
+  bold('A44','Dept. Supervisor____________________');
+  bold('E44','Date___________________________');
+  bold('A45','President__________________________');
+  bold('E45','Date___________________________');
+
+  // ── Sheet range & column widths ───────────────────────────────
+  ws['!ref'] = 'A1:H45';
+  ws['!cols'] = [{wch:18},{wch:38},{wch:10},{wch:12},{wch:10},{wch:10},{wch:10},{wch:12}];
+  ws['!rows'] = Array(45).fill({hpt:21});
+
+  // Merge cells to match template
+  ws['!merges'] = [
+    {s:{r:0,c:0},e:{r:0,c:7}},  // A1:H1 title
+    {s:{r:5,c:2},e:{r:5,c:4}},  // C6:E6 transportation
+  ];
+
+  XLSX.utils.book_append_sheet(wb, ws, 'Expense Report');
+  XLSX.writeFile(wb, `Expense Report - ${month} ${year}.xlsx`);
+  showToast(`Downloaded: Expense Report - ${month} ${year}.xlsx`, 'success');
+}
+
+// ── Test API Key ──────────────────────────────────────────────────
+async function testApiKey() {
+  const apiKey = document.getElementById('apiKey').value.trim();
+  const status = document.getElementById('keyStatus');
+  if (!apiKey) { showToast('Please paste your API key first','error'); return; }
+  const btn = document.getElementById('testBtn');
+  btn.disabled = true; btn.textContent = 'Testing...'; status.textContent = '';
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method:'POST',
+      headers:{
+        'x-api-key':apiKey,'anthropic-version':'2023-06-01',
+        'content-type':'application/json',
+        'anthropic-dangerous-client-side-api-key-disclosure':'cvb-expense-tool'
+      },
+      body: JSON.stringify({ model:'claude-opus-4-5', max_tokens:10, messages:[{role:'user',content:'Hi'}] })
+    });
+    if (res.ok) {
+      status.innerHTML = '<span style="color:green;font-weight:700">&#10003; API key works!</span>';
+      showToast('API key is valid!','success');
+    } else {
+      const e = await res.json();
+      const m = e.error?.message||`Error ${res.status}`;
+      status.innerHTML = `<span style="color:red;font-weight:700">&#10007; ${m}</span>`;
+      showToast(m,'error');
+    }
+  } catch(e) {
+    status.innerHTML = `<span style="color:red;font-weight:700">&#10007; ${e.message}</span>`;
+    showToast(e.message,'error');
+  }
+  btn.disabled=false; btn.textContent='✓ Test Key';
+}
+
+// ── Toast ─────────────────────────────────────────────────────────
+function showToast(msg, type='') {
+  const t = document.getElementById('toast');
+  t.textContent=msg; t.className=`toast show ${type}`;
+  setTimeout(()=>t.className='toast', type==='error'?6000:3500);
+}
+</script>
+</body>
+</html>
