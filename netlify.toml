@@ -1,0 +1,10 @@
+[functions]
+  node_bundler = "esbuild"
+
+[build]
+  publish = "."
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
