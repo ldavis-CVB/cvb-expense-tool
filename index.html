@@ -155,23 +155,66 @@
 <div class="toast" id="toast"></div>
 
 <script>
-// ── GL Code Rules ─────────────────────────────────────────────────
-const GL_RULES = [
-  { keywords: ['verizon','intelepeer','phone','telecom','wireless'],                                          code: '200-700390', cat: 'Telephone' },
-  { keywords: ['canva','claude','otter','adobe','microsoft','software','subscription','saas'],                code: '200-700875', cat: 'Software / Subscriptions' },
-  { keywords: ['shell','sheetz','bp','exxon','chevron','mobil','gas','fuel','gasoline'],                      code: '200-700905', cat: 'Travel - Gas' },
-  { keywords: ['amazon','walmart','staples','office depot','scanner','speaker','supplies','equipment','asset'],code: '100-700520', cat: 'Equipment / Supplies' },
-  { keywords: ['hotel','marriott','hilton','hyatt','hampton','inn','suites','lodging'],                       code: '200-700820', cat: 'Hotel / Lodging' },
-  { keywords: ['meal','lunch','dinner','breakfast','restaurant','cafe','coffee','doordash','grubhub','ubereats','jimmy','eddison','skyline'], code: '200-700810', cat: 'Meals & Entertainment' },
+// ── GL Code Definitions (from Accounts Payable Codes sheet) ──────
+const ACCOUNTS = [
+  { num: '611800', name: 'Auto Expense' },
+  { num: '700350', name: 'Advertising' },
+  { num: '700530', name: 'Brochures / Publications' },
+  { num: '700000', name: 'Contract Services' },
+  { num: '700700', name: 'Dues and Memberships' },
+  { num: '700810', name: 'Education and Training' },
+  { num: '700430', name: 'Equipment Repair & Maintenance' },
+  { num: '700565', name: 'Furniture and Equipment' },
+  { num: '701050', name: 'Insurance' },
+  { num: '700520', name: 'Office Supplies' },
+  { num: '700865', name: 'Photography and Video' },
+  { num: '700370', name: 'Postage' },
+  { num: '700875', name: 'Promotions' },
+  { num: '700330', name: 'Rent' },
+  { num: '700390', name: 'Telephone' },
+  { num: '700900', name: 'Trade Shows' },
+  { num: '700905', name: 'Travel' },
+  { num: '700510', name: 'Visitors Guide' },
+  { num: '900700', name: 'Contingency' },
 ];
 
+const DEPTS = [
+  { code: '100', name: 'Administration' },
+  { code: '200', name: 'Marketing / Promotion' },
+  { code: '300', name: 'Visitors Services' },
+];
+
+const SECOND3_CODES = [
+  { code: '400-790020', name: 'Carolina Beach — Promotion' },
+  { code: '500-790030', name: 'Carolina Beach — Activity' },
+  { code: '400-790060', name: 'Wrightsville Beach — Promotion' },
+  { code: '500-790070', name: 'Wrightsville Beach — Activity' },
+  { code: '400-790050', name: 'Kure Beach — Promotion' },
+  { code: '500-790040', name: 'Kure Beach — Activity' },
+];
+
+// Flat list used for lookups and export
 const GL_OPTIONS = [
-  { code: '200-700810', label: 'Meals & Entertainment' },
-  { code: '200-700875', label: 'Software / Subscriptions' },
-  { code: '200-700905', label: 'Travel - Gas' },
-  { code: '200-700390', label: 'Telephone' },
-  { code: '100-700520', label: 'Equipment / Supplies' },
-  { code: '200-700820', label: 'Hotel / Lodging' },
+  ...DEPTS.flatMap(d => ACCOUNTS.map(a => ({ code: `${d.code}-${a.num}`, label: a.name }))),
+  ...SECOND3_CODES.map(s => ({ code: s.code, label: s.name })),
+];
+
+// ── Auto-assignment rules ─────────────────────────────────────────
+const GL_RULES = [
+  { keywords: ['verizon','intelepeer','phone','telecom','wireless','att','t-mobile'],                               code: '200-700390', cat: 'Telephone' },
+  { keywords: ['canva','claude','otter','adobe','microsoft','software','subscription','saas','zoom','dropbox'],     code: '200-700875', cat: 'Promotions' },
+  { keywords: ['shell','sheetz','bp','exxon','chevron','mobil','gas','fuel','gasoline','uber','lyft'],              code: '200-700905', cat: 'Travel' },
+  { keywords: ['hotel','marriott','hilton','hyatt','hampton','inn','suites','lodging','airbnb'],                    code: '200-700905', cat: 'Travel' },
+  { keywords: ['restaurant','cafe','coffee','doordash','grubhub','ubereats','jimmy','eddison','skyline','pizza','lunch','dinner','breakfast','meal'], code: '200-700905', cat: 'Travel' },
+  { keywords: ['amazon','walmart','staples','office depot','supplies','paper','pen','ink','toner'],                 code: '200-700520', cat: 'Office Supplies' },
+  { keywords: ['scanner','printer','computer','laptop','monitor','keyboard','mouse','speaker','furniture'],         code: '200-700565', cat: 'Furniture and Equipment' },
+  { keywords: ['usps','fedex','ups','stamps','postage','shipping','mail'],                                         code: '200-700370', cat: 'Postage' },
+  { keywords: ['conference','training','seminar','workshop','class','course','education'],                         code: '200-700810', cat: 'Education and Training' },
+  { keywords: ['photo','photography','video','film','camera','shoot'],                                             code: '200-700865', cat: 'Photography and Video' },
+  { keywords: ['trade show','tradeshow','exhibit','booth','convention'],                                           code: '200-700900', cat: 'Trade Shows' },
+  { keywords: ['membership','dues','association','ntia','usta'],                                                   code: '200-700700', cat: 'Dues and Memberships' },
+  { keywords: ['advertising','ad','media','billboard','newspaper','radio'],                                        code: '200-700350', cat: 'Advertising' },
+  { keywords: ['brochure','publication','print','printing','flyer','pamphlet'],                                    code: '200-700530', cat: 'Brochures / Publications' },
 ];
 
 function getGL(vendor, description) {
@@ -179,7 +222,7 @@ function getGL(vendor, description) {
   for (const rule of GL_RULES) {
     if (rule.keywords.some(k => text.includes(k))) return { code: rule.code, cat: rule.cat };
   }
-  return { code: '200-700810', cat: 'Meals & Entertainment' };
+  return { code: '200-700905', cat: 'Travel' }; // default
 }
 
 // ── File Queue ────────────────────────────────────────────────────
@@ -359,7 +402,17 @@ function getMonth(d) { try { return new Date(d).toLocaleString('default',{month:
 
 // ── Expense Table ─────────────────────────────────────────────────
 function glSelect(selected) {
-  return `<select onchange="updateGL(this)">${GL_OPTIONS.map(g=>`<option value="${g.code}"${g.code===selected?' selected':''}>${g.code} — ${g.label}</option>`).join('')}</select>`;
+  const deptGroups = DEPTS.map(d => {
+    const opts = ACCOUNTS.map(a => {
+      const code = `${d.code}-${a.num}`;
+      return `<option value="${code}"${code===selected?' selected':''}>${code} — ${a.name}</option>`;
+    }).join('');
+    return `<optgroup label="${d.code} · ${d.name}">${opts}</optgroup>`;
+  }).join('');
+  const specialOpts = SECOND3_CODES.map(s =>
+    `<option value="${s.code}"${s.code===selected?' selected':''}>${s.code} — ${s.name}</option>`
+  ).join('');
+  return `<select onchange="updateGL(this)">${deptGroups}<optgroup label="Second 3% Accounts">${specialOpts}</optgroup></select>`;
 }
 
 function addExpenseRow(data) { expenses.push(data); renderTable(); }
