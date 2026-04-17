@@ -410,19 +410,19 @@ function exportToExcel() {
   const rows = [];
   const push = (arr) => rows.push(arr);
 
-  push(['Expense Report','','','','','','','']);
-  push(['Wilmington & Beaches CVB','','','','Employee Name:','','Lee Davis','']);
-  push(['Purpose of Travel:','','','','','','','']);
-  push(['Period Covered:','',`${month} ${year}`,'','','','','']);
-  push(['','','','','','','','']);
-  push(['','','Transportation','','','','','']);
-  push(['Date','Explanation','Miles','Other','Hotel','Meals','Other','Total']);
+  push(['Expense Report','','','','','','','','']);
+  push(['Wilmington & Beaches CVB','','','','Employee Name:','','Lee Davis','','']);
+  push(['Purpose of Travel:','','','','','','','','']);
+  push(['Period Covered:','',`${month} ${year}`,'','','','','','']);
+  push(['','','','','','','','','']);
+  push(['','','Transportation','','','','','','']);
+  push(['Date','Explanation','Miles','Other','Hotel','Meals','Other','Total','GL Code']);
 
   let totalHotel=0, totalMeals=0, totalOther=0, totalAll=0, totalCC=0;
 
   expenses.slice(0,24).forEach(e => {
     const amt = parseFloat(e.amount) || 0;
-    const row = [e.date, `${e.vendor} - ${e.description}`, '', '', '', '', '', amt];
+    const row = [e.date, `${e.vendor} - ${e.description}`, '', '', '', '', '', amt, e.gl||''];
     if      (e.gl==='200-700820') { row[4]=amt; totalHotel+=amt; }
     else if (e.gl==='200-700810') { row[5]=amt; totalMeals+=amt; }
     else                          { row[6]=amt; totalOther+=amt; }
@@ -432,26 +432,26 @@ function exportToExcel() {
   });
 
   // Pad to row 32
-  while (rows.length < 31) push(['','','','','','','','']);
+  while (rows.length < 31) push(['','','','','','','','','']);
 
-  push(['','Visa Charges','','','','','','']);
-  push([`Mileage Rate $0.560`,' Total Miles','','','','','','']);
-  push(['',' Total Amount','','',totalHotel,totalMeals,totalOther,totalAll]);
-  push(['Method of Payment:','','','Advance Received:','','','',0]);
-  push(['Bureau Credit Card Charge','',totalCC,'Deduct Expense on this Report:','','','',0]);
-  push(['Personal: Cash/Check/CC','','','Balance due CVB:','','','',0]);
-  push(['','','','Balance due Employee:','','','','']);
-  push(['','','','','','','','']);
-  push(['','','','','','','','']);
-  push(['I certify that the above expenses have','','','','Expense voucher audited by:','','','']);
-  push(['Been incurred on behalf of the Cape','','','','Date__________________________','','','']);
-  push(['Fear CVB:','','','','','','','']);
-  push(['Employee__________________________','','','','Date___________________________','','','']);
-  push(['Dept. Supervisor____________________','','','','Date___________________________','','','']);
-  push(['President__________________________','','','','Date___________________________','','','']);
+  push(['','Visa Charges','','','','','','','']);
+  push([`Mileage Rate $0.560`,' Total Miles','','','','','','','']);
+  push(['',' Total Amount','','',totalHotel,totalMeals,totalOther,totalAll,'']);
+  push(['Method of Payment:','','','Advance Received:','','','',0,'']);
+  push(['Bureau Credit Card Charge','',totalCC,'Deduct Expense on this Report:','','','',0,'']);
+  push(['Personal: Cash/Check/CC','','','Balance due CVB:','','','',0,'']);
+  push(['','','','Balance due Employee:','','','','','']);
+  push(['','','','','','','','','']);
+  push(['','','','','','','','','']);
+  push(['I certify that the above expenses have','','','','Expense voucher audited by:','','','','']);
+  push(['Been incurred on behalf of the Cape','','','','Date__________________________','','','','']);
+  push(['Fear CVB:','','','','','','','','']);
+  push(['Employee__________________________','','','','Date___________________________','','','','']);
+  push(['Dept. Supervisor____________________','','','','Date___________________________','','','','']);
+  push(['President__________________________','','','','Date___________________________','','','','']);
 
   const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws['!cols'] = [{wch:22},{wch:40},{wch:10},{wch:14},{wch:10},{wch:10},{wch:10},{wch:12}];
+  ws['!cols'] = [{wch:22},{wch:40},{wch:10},{wch:14},{wch:10},{wch:10},{wch:10},{wch:12},{wch:16}];
   ws['!merges'] = [
     {s:{r:0,c:0},e:{r:0,c:7}},
     {s:{r:5,c:2},e:{r:5,c:4}},
