@@ -226,15 +226,15 @@ function removeFile(idx) { fileQueue.splice(idx,1); renderQueue(); }
 function clearQueue()    { fileQueue = []; renderQueue(); }
 
 // ── AI Extraction ─────────────────────────────────────────────────
-// Vercel hard limit is 4.5MB per request; keep payloads under 3MB to be safe
-const MAX_B64_BYTES = 3 * 1024 * 1024; // 3MB
+// Keep payloads well under Vercel's 4.5MB hard limit
+const MAX_B64_CHARS = 1.2 * 1024 * 1024; // 1.2MB base64 (~900KB raw) — generous headroom
 
 function fileToBase64(file) {
   return new Promise((res, rej) => {
-    // PDFs — check size first, then send as-is
+    // PDFs — reject if raw file > 1MB (base64 would be ~1.35MB, safe)
     if (file.type === 'application/pdf') {
-      if (file.size > MAX_B64_BYTES) {
-        rej(new Error(`PDF is ${(file.size/1024/1024).toFixed(1)} MB — please use a smaller/compressed PDF (under 3 MB)`));
+      if (file.size > 1 * 1024 * 1024) {
+        rej(new Error(`PDF is ${(file.size/1024/1024).toFixed(1)} MB — scanner PDFs are often large. Try printing to PDF from a PDF viewer to compress it first.`));
         return;
       }
       const r = new FileReader();
@@ -243,12 +243,12 @@ function fileToBase64(file) {
       r.readAsDataURL(file);
       return;
     }
-    // Images — resize and compress until under 3MB base64
+    // Images — resize to 700px max, compress until under 1.2MB base64
     const img = new Image();
     const url = URL.createObjectURL(file);
     img.onload = () => {
       URL.revokeObjectURL(url);
-      const MAX_DIM = 800;
+      const MAX_DIM = 700;
       let w = img.width, h = img.height;
       if (w > MAX_DIM || h > MAX_DIM) {
         if (w > h) { h = Math.round(h * MAX_DIM / w); w = MAX_DIM; }
@@ -257,13 +257,13 @@ function fileToBase64(file) {
       const canvas = document.createElement('canvas');
       canvas.width = w; canvas.height = h;
       canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-      // Try progressively lower quality until under limit
-      for (const q of [0.7, 0.55, 0.4]) {
+      // Try progressively lower quality — Claude only needs to read text, not view art
+      for (const q of [0.7, 0.5, 0.3]) {
         const dataUrl = canvas.toDataURL('image/jpeg', q);
         const b64 = dataUrl.split(',')[1];
-        if (b64.length <= MAX_B64_BYTES) { res(b64); return; }
+        if (b64.length <= MAX_B64_CHARS) { res(b64); return; }
       }
-      rej(new Error('Image is too large to process even after compression — try a smaller photo'));
+      rej(new Error('Image could not be compressed enough — try a lower-resolution scan'));
     };
     img.onerror = rej;
     img.src = url;
