@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CVB Expense Receipt Uploader</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: Arial, sans-serif; background: #f0f2f5; color: #222; min-height: 100vh; }
@@ -227,23 +228,42 @@ function clearQueue()    { fileQueue = []; renderQueue(); }
 
 // ── AI Extraction ─────────────────────────────────────────────────
 // Keep payloads well under Vercel's 4.5MB hard limit
-const MAX_B64_CHARS = 1.2 * 1024 * 1024; // 1.2MB base64 (~900KB raw) — generous headroom
+const MAX_B64_CHARS = 1.2 * 1024 * 1024; // 1.2MB base64
 
+// Configure PDF.js worker
+if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc =
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+// Render a File (image or PDF) to a compressed JPEG base64 string
 function fileToBase64(file) {
   return new Promise((res, rej) => {
-    // PDFs — reject if raw file > 1MB (base64 would be ~1.35MB, safe)
     if (file.type === 'application/pdf') {
-      if (file.size > 1 * 1024 * 1024) {
-        rej(new Error(`PDF is ${(file.size/1024/1024).toFixed(1)} MB — scanner PDFs are often large. Try printing to PDF from a PDF viewer to compress it first.`));
-        return;
-      }
-      const r = new FileReader();
-      r.onload  = () => res(r.result.split(',')[1]);
-      r.onerror = rej;
-      r.readAsDataURL(file);
+      // Render first page of PDF to canvas via PDF.js, then compress as JPEG
+      const reader = new FileReader();
+      reader.onerror = rej;
+      reader.onload = async () => {
+        try {
+          if (!window.pdfjsLib) throw new Error('PDF.js not loaded');
+          pdfjsLib.GlobalWorkerOptions.workerSrc =
+            'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+          const typedArr = new Uint8Array(reader.result);
+          const pdf  = await pdfjsLib.getDocument({ data: typedArr }).promise;
+          const page = await pdf.getPage(1);
+          // Scale so longest side is ~1000px
+          const viewport0 = page.getViewport({ scale: 1 });
+          const scale = Math.min(1000 / viewport0.width, 1000 / viewport0.height, 2);
+          const viewport = page.getViewport({ scale });
+          const canvas = document.createElement('canvas');
+          canvas.width  = viewport.width;
+          canvas.height = viewport.height;
+          await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+          compressCanvas(canvas, res, rej);
+        } catch(e) { rej(e); }
+      };
+      reader.readAsArrayBuffer(file);
       return;
     }
-    // Images — resize to 700px max, compress until under 1.2MB base64
+    // Regular images — resize to 700px max then compress
     const img = new Image();
     const url = URL.createObjectURL(file);
     img.onload = () => {
@@ -257,23 +277,25 @@ function fileToBase64(file) {
       const canvas = document.createElement('canvas');
       canvas.width = w; canvas.height = h;
       canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-      // Try progressively lower quality — Claude only needs to read text, not view art
-      for (const q of [0.7, 0.5, 0.3]) {
-        const dataUrl = canvas.toDataURL('image/jpeg', q);
-        const b64 = dataUrl.split(',')[1];
-        if (b64.length <= MAX_B64_CHARS) { res(b64); return; }
-      }
-      rej(new Error('Image could not be compressed enough — try a lower-resolution scan'));
+      compressCanvas(canvas, res, rej);
     };
     img.onerror = rej;
     img.src = url;
   });
 }
 
+function compressCanvas(canvas, res, rej) {
+  for (const q of [0.75, 0.55, 0.35]) {
+    const b64 = canvas.toDataURL('image/jpeg', q).split(',')[1];
+    if (b64.length <= MAX_B64_CHARS) { res(b64); return; }
+  }
+  rej(new Error('Receipt image could not be compressed enough — try a lower-resolution scan'));
+}
+
 async function extractReceipt(item) {
   const base64    = await fileToBase64(item.file);
-  // After compression images are always JPEG; PDFs stay as-is
-  const mediaType = item.file.type === 'application/pdf' ? 'application/pdf' : 'image/jpeg';
+  // Everything is rendered/compressed to JPEG before sending
+  const mediaType = 'image/jpeg';
 
   const res = await fetch('/api/proxy', {
     method: 'POST',
