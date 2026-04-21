@@ -415,7 +415,15 @@ function glSelect(selected) {
   return `<select onchange="updateGL(this)">${deptGroups}<optgroup label="Second 3% Accounts">${specialOpts}</optgroup></select>`;
 }
 
-function addExpenseRow(data) { expenses.push(data); renderTable(); }
+function addExpenseRow(data) { expenses.push(data); sortExpenses(); renderTable(); }
+
+function sortExpenses() {
+  expenses.sort((a, b) => {
+    const da = a.date ? new Date(a.date) : new Date(0);
+    const db = b.date ? new Date(b.date) : new Date(0);
+    return (isNaN(da) ? 0 : da) - (isNaN(db) ? 0 : db);
+  });
+}
 
 function addBlankRow() {
   addExpenseRow({ date: today(), vendor:'', description:'', amount:'', gl:'200-700810', cat:'Meals & Entertainment', month: getMonth(today()) });
@@ -429,7 +437,7 @@ function renderTable() {
   if (!expenses.length) { tbody.innerHTML = '<tr><td colspan="9" class="empty-state">No expense entries yet</td></tr>'; return; }
   tbody.innerHTML = expenses.map((e,i) => `
     <tr>
-      <td><input type="text" value="${esc(e.date)}" onchange="expenses[${i}].date=this.value;expenses[${i}].month=getMonth(this.value)" style="width:105px"/></td>
+      <td><input type="text" value="${esc(e.date)}" onchange="expenses[${i}].date=this.value;expenses[${i}].month=getMonth(this.value);sortExpenses();renderTable()" style="width:105px"/></td>
       <td><input type="text" value="${esc(e.vendor)}" onchange="expenses[${i}].vendor=this.value"/></td>
       <td><input type="text" value="${esc(e.description)}" onchange="expenses[${i}].description=this.value"/></td>
       <td class="amount-cell"><input type="number" step="0.01" value="${e.amount}" onchange="expenses[${i}].amount=parseFloat(this.value)||0" style="width:90px"/></td>
