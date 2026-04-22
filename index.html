@@ -184,6 +184,26 @@ const DEPTS = [
   { code: '300', name: 'Visitors Services' },
 ];
 
+// Dept 600 has its own account list (budget codes, removing 40090 prefix)
+const DEPT600_ACCOUNTS = [
+  { num: '610000', name: 'Salaries and Wages' },
+  { num: '700000', name: 'Contract Services' },
+  { num: '700328', name: 'Lease Expense' },
+  { num: '700329', name: 'Subscription Software' },
+  { num: '700330', name: 'Rent' },
+  { num: '700350', name: 'Advertising' },
+  { num: '700370', name: 'Postage' },
+  { num: '700390', name: 'Telephone' },
+  { num: '700430', name: 'Equipment Repair & Maintenance' },
+  { num: '700520', name: 'Supplies' },
+  { num: '700565', name: 'Supplies - Furniture' },
+  { num: '700700', name: 'Dues & Subscriptions' },
+  { num: '700855', name: 'Miscellaneous - Other' },
+  { num: '700875', name: 'Promotions' },
+  { num: '700900', name: 'Trade Shows' },
+  { num: '700905', name: 'Training & Travel' },
+];
+
 const SECOND3_CODES = [
   { code: '400-790020', name: 'Carolina Beach — Promotion' },
   { code: '500-790030', name: 'Carolina Beach — Activity' },
@@ -196,6 +216,7 @@ const SECOND3_CODES = [
 // Flat list used for lookups and export
 const GL_OPTIONS = [
   ...DEPTS.flatMap(d => ACCOUNTS.map(a => ({ code: `${d.code}-${a.num}`, label: a.name }))),
+  ...DEPT600_ACCOUNTS.map(a => ({ code: `600-${a.num}`, label: a.name })),
   ...SECOND3_CODES.map(s => ({ code: s.code, label: s.name })),
 ];
 
@@ -409,10 +430,14 @@ function glSelect(selected) {
     }).join('');
     return `<optgroup label="${d.code} · ${d.name}">${opts}</optgroup>`;
   }).join('');
+  const dept600Opts = DEPT600_ACCOUNTS.map(a => {
+    const code = `600-${a.num}`;
+    return `<option value="${code}"${code===selected?' selected':''}>${code} — ${a.name}</option>`;
+  }).join('');
   const specialOpts = SECOND3_CODES.map(s =>
     `<option value="${s.code}"${s.code===selected?' selected':''}>${s.code} — ${s.name}</option>`
   ).join('');
-  return `<select onchange="updateGL(this)">${deptGroups}<optgroup label="Second 3% Accounts">${specialOpts}</optgroup></select>`;
+  return `<select onchange="updateGL(this)">${deptGroups}<optgroup label="600 · Budget Codes">${dept600Opts}</optgroup><optgroup label="Second 3% Accounts">${specialOpts}</optgroup></select>`;
 }
 
 function addExpenseRow(data) { expenses.push(data); sortExpenses(); renderTable(); }
