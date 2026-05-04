@@ -404,8 +404,8 @@ async function processAll() {
       item.status = 'error'; item.error = err.message; renderQueue();
       showToast(`Error: ${err.message}`, 'error');
       // If rate limited, stop processing remaining receipts
-      if (err.message.toLowerCase().includes('rate') || err.message.includes('529') || err.message.includes('limit')) {
-        document.getElementById('processStatus').textContent = 'Rate limited — wait 30 seconds and try again';
+      if (err.message.toLowerCase().includes('rate') || err.message.includes('529') || err.message.toLowerCase().includes('overload') || err.message.toLowerCase().includes('limit')) {
+        document.getElementById('processStatus').textContent = 'AI is overloaded — wait 1–2 minutes and try again';
         break;
       }
     }
