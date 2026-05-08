@@ -6,6 +6,7 @@
 <title>CVB Expense Receipt Uploader</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://unpkg.com/heic2any@0.0.4/dist/heic2any.min.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: Arial, sans-serif; background: #f0f2f5; color: #222; min-height: 100vh; }
@@ -113,8 +114,8 @@
   <div class="upload-zone" id="uploadZone">
     <div class="icon">&#128196;</div>
     <h2>Drop receipts here or click to browse</h2>
-    <p>Supports JPG, PNG, PDF &mdash; upload multiple at once</p>
-    <input type="file" id="fileInput" multiple accept="image/*,.pdf" />
+    <p>Supports JPG, PNG, HEIC, PDF &mdash; upload multiple at once</p>
+    <input type="file" id="fileInput" multiple accept="image/*,.pdf,.heic,.heif" />
   </div>
 
   <div class="queue-section" id="queueSection" style="display:none">
@@ -300,9 +301,18 @@ if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc =
 
 // Render a File (image or PDF) to a compressed JPEG base64 string
 function fileToBase64(file) {
+  // HEIC/HEIF — convert to JPEG first, then recurse
+  if (file.type === 'image/heic' || file.type === 'image/heif' || /\.(heic|heif)$/i.test(file.name)) {
+    if (!window.heic2any) return Promise.reject(new Error('HEIC converter not loaded — refresh and try again'));
+    return heic2any({ blob: file, toType: 'image/jpeg', quality: 0.85 }).then(blob => {
+      const b = Array.isArray(blob) ? blob[0] : blob;
+      return fileToBase64(new File([b], file.name.replace(/\.(heic|heif)$/i, '.jpg'), { type: 'image/jpeg' }));
+    });
+  }
+
   return new Promise((res, rej) => {
+    // PDFs — render page 1 to canvas via PDF.js
     if (file.type === 'application/pdf') {
-      // Render first page of PDF to canvas via PDF.js, then compress as JPEG
       const reader = new FileReader();
       reader.onerror = rej;
       reader.onload = async () => {
@@ -310,24 +320,21 @@ function fileToBase64(file) {
           if (!window.pdfjsLib) throw new Error('PDF.js not loaded');
           pdfjsLib.GlobalWorkerOptions.workerSrc =
             'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-          const typedArr = new Uint8Array(reader.result);
-          const pdf  = await pdfjsLib.getDocument({ data: typedArr }).promise;
+          const pdf  = await pdfjsLib.getDocument({ data: new Uint8Array(reader.result) }).promise;
           const page = await pdf.getPage(1);
-          // Scale so longest side is ~1000px
-          const viewport0 = page.getViewport({ scale: 1 });
-          const scale = Math.min(1000 / viewport0.width, 1000 / viewport0.height, 2);
-          const viewport = page.getViewport({ scale });
+          const vp0  = page.getViewport({ scale: 1 });
+          const scale = Math.min(1000 / vp0.width, 1000 / vp0.height, 2);
+          const vp   = page.getViewport({ scale });
           const canvas = document.createElement('canvas');
-          canvas.width  = viewport.width;
-          canvas.height = viewport.height;
-          await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+          canvas.width = vp.width; canvas.height = vp.height;
+          await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
           compressCanvas(canvas, res, rej);
         } catch(e) { rej(e); }
       };
       reader.readAsArrayBuffer(file);
       return;
     }
-    // Regular images — resize to 700px max then compress
+    // Images (JPG, PNG, etc.) — resize to 700px max then compress
     const img = new Image();
     const url = URL.createObjectURL(file);
     img.onload = () => {
