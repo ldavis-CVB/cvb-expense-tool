@@ -390,6 +390,11 @@ async function extractReceipt(item) {
   return { date: null, vendor: 'Unknown', description: 'Could not read receipt — please edit manually', amount: null };
 }
 
+function isRateLimit(msg) {
+  const m = msg.toLowerCase();
+  return m.includes('rate') || m.includes('529') || m.includes('overload') || m.includes('limit');
+}
+
 async function processAll() {
   const pending = fileQueue.filter(f => f.status === 'pending');
   if (!pending.length) { showToast('No new receipts to process','error'); return; }
@@ -398,25 +403,35 @@ async function processAll() {
 
   for (let i = 0; i < pending.length; i++) {
     const item = pending[i];
-    document.getElementById('processStatus').textContent = `Processing ${i+1} of ${pending.length}...`;
     item.status = 'processing'; renderQueue();
-    try {
-      const extracted = await extractReceipt(item);
-      item.status = 'done'; renderQueue();
-      const vendor = extracted.vendor || item.file.name;
-      const desc   = extracted.description || '';
-      const gl     = getGL(vendor, desc);
-      addExpenseRow({ date: extracted.date || today(), vendor, description: desc, amount: extracted.amount || 0, gl: gl.code, cat: gl.cat, month: getMonth(extracted.date) });
-    } catch(err) {
-      item.status = 'error'; item.error = err.message; renderQueue();
-      showToast(`Error: ${err.message}`, 'error');
-      // If rate limited, stop processing remaining receipts
-      if (err.message.toLowerCase().includes('rate') || err.message.includes('529') || err.message.toLowerCase().includes('overload') || err.message.toLowerCase().includes('limit')) {
-        document.getElementById('processStatus').textContent = 'AI is overloaded — wait 1–2 minutes and try again';
+
+    let success = false;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      document.getElementById('processStatus').textContent =
+        attempt === 0 ? `Processing ${i+1} of ${pending.length}…`
+                      : `Retrying ${i+1} of ${pending.length} (attempt ${attempt+1})…`;
+      try {
+        const extracted = await extractReceipt(item);
+        item.status = 'done'; renderQueue();
+        const vendor = extracted.vendor || item.file.name;
+        const desc   = extracted.description || '';
+        const gl     = getGL(vendor, desc);
+        addExpenseRow({ date: extracted.date || today(), vendor, description: desc, amount: extracted.amount || 0, gl: gl.code, cat: gl.cat, month: getMonth(extracted.date) });
+        success = true;
         break;
+      } catch(err) {
+        if (isRateLimit(err.message) && attempt < 2) {
+          // Wait 65s then retry — enough to clear the 60s rolling window
+          await countdown(65, 'Rate limited — retrying in');
+        } else {
+          item.status = 'error'; item.error = err.message; renderQueue();
+          showToast(`Error on receipt ${i+1}: ${err.message}`, 'error');
+          break;
+        }
       }
     }
-    if (i < pending.length - 1) await countdown(13);
+
+    if (i < pending.length - 1) await countdown(13, 'Next receipt in');
   }
 
   document.getElementById('processBtn').disabled = false;
@@ -426,10 +441,10 @@ async function processAll() {
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
-async function countdown(seconds) {
+async function countdown(seconds, label = 'Next receipt in') {
   const el = document.getElementById('processStatus');
   for (let s = seconds; s > 0; s--) {
-    el.textContent = `Next receipt in ${s}s…`;
+    el.textContent = `${label} ${s}s…`;
     await sleep(1000);
   }
 }
