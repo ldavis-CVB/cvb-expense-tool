@@ -392,7 +392,7 @@ async function extractReceipt(item) {
 
 function isRateLimit(msg) {
   const m = msg.toLowerCase();
-  return m.includes('rate') || m.includes('529') || m.includes('overload') || m.includes('limit');
+  return m.includes('rate') || m.includes('429') || m.includes('529') || m.includes('overload') || m.includes('limit') || m.includes('exceeded');
 }
 
 async function processAll() {

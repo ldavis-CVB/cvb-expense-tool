@@ -54,7 +54,12 @@ export default async function handler(req, res) {
     const result = await response.json();
 
     if (!response.ok) {
-      return res.status(response.status).json({ error: result.error?.message || 'API error' });
+      const errMsg = result.error?.message || `API error ${response.status}`;
+      // Always surface rate limit as a clear message the client can detect
+      if (response.status === 429) {
+        return res.status(429).json({ error: `Rate limit exceeded — ${errMsg}` });
+      }
+      return res.status(response.status).json({ error: errMsg });
     }
 
     if (action === 'test') return res.status(200).json({ status: 'ok' });
