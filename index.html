@@ -421,7 +421,7 @@ async function processAll() {
         break;
       } catch(err) {
         if (isRateLimit(err.message) && attempt < 2) {
-          await countdown(15, 'Rate limited — retrying in');
+          await countdown(65, 'Rate limited — retrying in');
         } else {
           item.status = 'error'; item.error = err.message; renderQueue();
           showToast(`Error on receipt ${i+1}: ${err.message}`, 'error');
@@ -430,7 +430,7 @@ async function processAll() {
       }
     }
 
-    if (i < pending.length - 1) await sleep(2000);
+    if (i < pending.length - 1) await countdown(15, 'Next receipt in');
   }
 
   document.getElementById('processBtn').disabled = false;
