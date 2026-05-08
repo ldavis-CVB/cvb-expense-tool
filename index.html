@@ -7,6 +7,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://unpkg.com/heic2any@0.0.4/dist/heic2any.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: Arial, sans-serif; background: #f0f2f5; color: #222; min-height: 100vh; }
@@ -97,6 +98,23 @@
   @keyframes spin { to { transform:rotate(360deg); } }
   .spinner { display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,0.4);border-top-color:white;border-radius:50%;animation:spin 0.7s linear infinite;vertical-align:middle; }
   .month-badge { display:inline-block;background:#e8f0fe;color:#1a3a6b;border-radius:12px;padding:2px 10px;font-size:0.75rem;font-weight:600; }
+
+  .staff-banner {
+    background:white; border-radius:12px; padding:18px 24px; margin-bottom:24px;
+    display:flex; align-items:center; gap:16px; flex-wrap:wrap;
+    box-shadow:0 1px 6px rgba(0,0,0,0.08); border-left:4px solid #1a3a6b;
+  }
+  .staff-banner select {
+    padding:9px 14px; border:1px solid #ddd; border-radius:8px;
+    font-size:1rem; font-weight:600; color:#1a3a6b; background:white; cursor:pointer;
+    min-width:220px;
+  }
+  .staff-banner select:focus { outline:none; border-color:#1a3a6b; }
+  .viewing-badge {
+    display:inline-block; background:#fff3cd; color:#856404;
+    border:1px solid #ffc107; border-radius:8px; padding:4px 12px; font-size:0.8rem; font-weight:600;
+  }
+  .locked { opacity:0.4; pointer-events:none; }
 </style>
 </head>
 <body>
@@ -110,6 +128,36 @@
 
 <div class="container">
 
+  <div class="staff-banner">
+    <span style="font-size:1.6rem">&#128100;</span>
+    <div>
+      <div style="font-weight:700;font-size:1rem;color:#1a3a6b">Who are you?</div>
+      <div style="font-size:0.8rem;color:#888;margin-top:2px">Select your name to load your saved expenses</div>
+    </div>
+    <select id="staffSelect" onchange="selectStaff(this.value)">
+      <option value="">— Select your name —</option>
+      <option>Alanna Hawley</option>
+      <option>Connie Nelson</option>
+      <option>Genia Artis</option>
+      <option>Hannah Almeter</option>
+      <option>Jessica Campbell</option>
+      <option>Jordan Daughtry</option>
+      <option>Karen Warren</option>
+      <option>Keaton Potts</option>
+      <option>Kim Hufham</option>
+      <option>Kim Little</option>
+      <option>Lee Davis</option>
+      <option>Mark McGrew</option>
+      <option>Megan Buchbinder</option>
+      <option>Molly Johnson</option>
+      <option>Sydney Callis</option>
+      <option>Trinity Dunlap</option>
+    </select>
+    <span id="viewingBadge" style="display:none" class="viewing-badge"></span>
+    <button id="newMonthBtn" class="btn" style="display:none;background:#c62828;color:white;margin-left:auto" onclick="clearAllExpenses()">&#128197; New Month</button>
+  </div>
+
+  <div id="mainContent" class="locked">
 
   <div class="upload-zone" id="uploadZone">
     <div class="icon">&#128196;</div>
@@ -151,11 +199,76 @@
       </table>
     </div>
   </div>
+
+  </div><!-- end mainContent -->
 </div>
 
 <div class="toast" id="toast"></div>
 
 <script>
+// ── Supabase ──────────────────────────────────────────────────────
+const sb = supabase.createClient(
+  'https://ictmbovcednvkyqnuquq.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImljdG1ib3ZjZWRudmt5cW51cXVxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgyNTU1NDQsImV4cCI6MjA5MzgzMTU0NH0.h85msdvguLyvOirGcgGdA6KVae7OAOGIuyqii9lsfb0'
+);
+
+const ADMIN = 'Lee Davis';
+let currentStaff = '';
+
+async function selectStaff(name) {
+  currentStaff = name;
+  const main = document.getElementById('mainContent');
+  const badge = document.getElementById('viewingBadge');
+  const newMonthBtn = document.getElementById('newMonthBtn');
+
+  if (!name) { main.classList.add('locked'); badge.style.display='none'; return; }
+
+  main.classList.remove('locked');
+  localStorage.setItem('cvb_staff', name);
+
+  // Show admin button for Lee
+  newMonthBtn.style.display = name === ADMIN ? 'inline-flex' : 'none';
+
+  // Show "viewing" badge if needed — always show who you are
+  badge.textContent = `📋 ${name}'s expenses`;
+  badge.style.display = 'inline-block';
+
+  await loadExpenses();
+}
+
+async function loadExpenses() {
+  const { data, error } = await sb.from('expenses')
+    .select('*').eq('staff_name', currentStaff).order('date', { ascending: true });
+  if (error) { showToast('Error loading expenses: ' + error.message, 'error'); return; }
+  expenses = data || [];
+  renderTable();
+}
+
+async function updateExpense(id, field, value) {
+  if (!id) return;
+  const { error } = await sb.from('expenses').update({ [field]: value }).eq('id', id);
+  if (error) console.error('Update error:', error.message);
+}
+
+async function clearAllExpenses() {
+  if (!confirm('Clear ALL expense entries for ALL staff and start a new month?\n\nThis cannot be undone.')) return;
+  const { error } = await sb.from('expenses').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+  if (error) { showToast('Error: ' + error.message, 'error'); return; }
+  expenses = [];
+  renderTable();
+  showToast('All entries cleared — ready for new month!', 'success');
+}
+
+// Restore last selected staff on page load
+window.addEventListener('DOMContentLoaded', () => {
+  const saved = localStorage.getItem('cvb_staff');
+  if (saved) {
+    const sel = document.getElementById('staffSelect');
+    sel.value = saved;
+    if (sel.value) selectStaff(saved);
+  }
+});
+
 // ── GL Code Definitions (from Accounts Payable Codes sheet) ──────
 const ACCOUNTS = [
   { num: '611800', name: 'Auto Expense' },
@@ -261,6 +374,7 @@ uploadZone.addEventListener('drop', e => { e.preventDefault(); uploadZone.classL
 fileInput.addEventListener('change', e => handleFiles([...e.target.files]));
 
 function handleFiles(files) {
+  if (!currentStaff) { showToast('Please select your name first', 'error'); return; }
   files.forEach(f => {
     if (!fileQueue.find(q => q.file.name === f.name && q.file.size === f.size))
       fileQueue.push({ file: f, status: 'pending', id: Date.now() + Math.random() });
@@ -416,7 +530,7 @@ async function processAll() {
         const vendor = extracted.vendor || item.file.name;
         const desc   = extracted.description || '';
         const gl     = getGL(vendor, desc);
-        addExpenseRow({ date: extracted.date || today(), vendor, description: desc, amount: extracted.amount || 0, gl: gl.code, cat: gl.cat, month: getMonth(extracted.date) });
+        await addExpenseRow({ date: extracted.date || today(), vendor, description: desc, amount: extracted.amount || 0, gl: gl.code, cat: gl.cat, month: getMonth(extracted.date) });
         success = true;
         break;
       } catch(err) {
@@ -469,7 +583,14 @@ function glSelect(selected) {
   return `<select onchange="updateGL(this)">${deptGroups}<optgroup label="600 · Budget Codes">${dept600Opts}</optgroup><optgroup label="Second 3% Accounts">${specialOpts}</optgroup></select>`;
 }
 
-function addExpenseRow(data) { expenses.push(data); sortExpenses(); renderTable(); }
+async function addExpenseRow(data) {
+  const row = { ...data, staff_name: currentStaff };
+  const { data: inserted, error } = await sb.from('expenses').insert(row).select().single();
+  if (error) { showToast('Save error: ' + error.message, 'error'); return; }
+  expenses.push(inserted);
+  sortExpenses();
+  renderTable();
+}
 
 function sortExpenses() {
   expenses.sort((a, b) => {
@@ -479,11 +600,16 @@ function sortExpenses() {
   });
 }
 
-function addBlankRow() {
-  addExpenseRow({ date: today(), vendor:'', description:'', amount:'', gl:'200-700810', cat:'Meals & Entertainment', month: getMonth(today()) });
+async function addBlankRow() {
+  await addExpenseRow({ date: today(), vendor:'', description:'', amount:'', gl:'200-700905', cat:'Travel', month: getMonth(today()) });
 }
 
-function deleteRow(idx) { expenses.splice(idx,1); renderTable(); }
+async function deleteRow(idx) {
+  const id = expenses[idx]?.id;
+  if (id) { const { error } = await sb.from('expenses').delete().eq('id', id); if (error) { showToast('Delete error: ' + error.message, 'error'); return; } }
+  expenses.splice(idx, 1);
+  renderTable();
+}
 
 function renderTable() {
   const tbody = document.getElementById('expenseBody');
@@ -491,13 +617,13 @@ function renderTable() {
   if (!expenses.length) { tbody.innerHTML = '<tr><td colspan="9" class="empty-state">No expense entries yet</td></tr>'; return; }
   tbody.innerHTML = expenses.map((e,i) => `
     <tr>
-      <td><input type="text" value="${esc(e.date)}" onchange="expenses[${i}].date=this.value;expenses[${i}].month=getMonth(this.value);sortExpenses();renderTable()" style="width:105px"/></td>
-      <td><input type="text" value="${esc(e.vendor)}" onchange="expenses[${i}].vendor=this.value"/></td>
-      <td><input type="text" value="${esc(e.description)}" onchange="expenses[${i}].description=this.value"/></td>
-      <td class="amount-cell"><input type="number" step="0.01" value="${e.amount}" onchange="expenses[${i}].amount=parseFloat(this.value)||0" style="width:90px"/></td>
+      <td><input type="text" value="${esc(e.date)}" onchange="expenses[${i}].date=this.value;expenses[${i}].month=getMonth(this.value);updateExpense('${e.id}','date',this.value);updateExpense('${e.id}','month',getMonth(this.value));sortExpenses();renderTable()" style="width:105px"/></td>
+      <td><input type="text" value="${esc(e.vendor)}" onchange="expenses[${i}].vendor=this.value;updateExpense('${e.id}','vendor',this.value)"/></td>
+      <td><input type="text" value="${esc(e.description)}" onchange="expenses[${i}].description=this.value;updateExpense('${e.id}','description',this.value)"/></td>
+      <td class="amount-cell"><input type="number" step="0.01" value="${e.amount}" onchange="expenses[${i}].amount=parseFloat(this.value)||0;updateExpense('${e.id}','amount',parseFloat(this.value)||0)" style="width:90px"/></td>
       <td>${glSelect(e.gl)}</td>
       <td style="font-size:0.78rem;color:#555">${e.gl}</td>
-      <td><select onchange="expenses[${i}].payment=this.value">
+      <td><select onchange="expenses[${i}].payment=this.value;updateExpense('${e.id}','payment',this.value)">
         <option${(e.payment||'Bureau CC')==='Bureau CC'?' selected':''}>Bureau CC</option>
         <option${(e.payment||'')==='Personal'?' selected':''}>Personal</option>
       </select></td>
@@ -508,7 +634,14 @@ function renderTable() {
 
 function updateGL(sel) {
   const idx = [...document.getElementById('expenseBody').rows].indexOf(sel.closest('tr'));
-  if (idx>=0) { expenses[idx].gl=sel.value; const o=GL_OPTIONS.find(g=>g.code===sel.value); expenses[idx].cat=o?o.label:''; renderTable(); }
+  if (idx>=0) {
+    expenses[idx].gl = sel.value;
+    const o = GL_OPTIONS.find(g=>g.code===sel.value);
+    expenses[idx].cat = o?o.label:'';
+    updateExpense(expenses[idx].id, 'gl', sel.value);
+    updateExpense(expenses[idx].id, 'cat', expenses[idx].cat);
+    renderTable();
+  }
 }
 
 function esc(s) { return (s||'').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
@@ -526,7 +659,7 @@ function exportToExcel() {
   const push = (arr) => rows.push(arr);
 
   push(['Expense Report','','','','','','','','']);
-  push(['Wilmington & Beaches CVB','','','','Employee Name:','','Lee Davis','','']);
+  push(['Wilmington & Beaches CVB','','','','Employee Name:','',currentStaff||'','','']);
   push(['Purpose of Travel:','','','','','','','','']);
   push(['Period Covered:','',`${month} ${year}`,'','','','','','']);
   push(['','','','','','','','','']);
@@ -575,7 +708,7 @@ function exportToExcel() {
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Expense Report');
 
-  const filename = `Expense Report - ${month} ${year}.xlsx`;
+  const filename = `Expense Report - ${currentStaff||'Staff'} - ${month} ${year}.xlsx`;
   try {
     XLSX.writeFile(wb, filename);
     showToast(`Downloaded: ${filename}`, 'success');
