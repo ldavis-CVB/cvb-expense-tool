@@ -409,7 +409,7 @@ async function processAll() {
         break;
       }
     }
-    if (i < pending.length - 1) await sleep(2000);
+    if (i < pending.length - 1) await sleep(1000);
   }
 
   document.getElementById('processBtn').disabled = false;
