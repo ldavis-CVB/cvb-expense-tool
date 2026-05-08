@@ -278,7 +278,7 @@ function renderQueue() {
     const isPDF = item.file.type === 'application/pdf';
     const thumb = isPDF ? `<div class="file-icon">&#128196;</div>` : `<img class="thumb" src="${URL.createObjectURL(item.file)}" alt="receipt" />`;
     const statusText = { pending:'', processing:'&#9203; Reading...', done:'&#10003; Done', error:'&#10007; Error' }[item.status] || '';
-    const errorMsg   = item.status === 'error' ? `<div class="error-msg">${item.error||'Unknown error'}</div>` : '';
+    const errorMsg   = item.status === 'error' ? `<div class="error-msg" title="${(item.error||'').replace(/"/g,'&quot;')}">${item.error||'Unknown error'}</div>` : '';
     return `<div class="queue-item ${item.status}">
       <button class="remove-btn" onclick="removeFile(${idx})">&times;</button>
       ${thumb}
