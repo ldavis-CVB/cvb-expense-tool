@@ -409,7 +409,7 @@ async function processAll() {
     for (let attempt = 0; attempt < 3; attempt++) {
       document.getElementById('processStatus').textContent =
         attempt === 0 ? `Processing ${i+1} of ${pending.length}…`
-                      : `Retrying ${i+1} of ${pending.length} (attempt ${attempt+1})…`;
+                      : `Retrying ${i+1} of ${pending.length}…`;
       try {
         const extracted = await extractReceipt(item);
         item.status = 'done'; renderQueue();
@@ -421,8 +421,7 @@ async function processAll() {
         break;
       } catch(err) {
         if (isRateLimit(err.message) && attempt < 2) {
-          // Wait 65s then retry — enough to clear the 60s rolling window
-          await countdown(65, 'Rate limited — retrying in');
+          await countdown(15, 'Rate limited — retrying in');
         } else {
           item.status = 'error'; item.error = err.message; renderQueue();
           showToast(`Error on receipt ${i+1}: ${err.message}`, 'error');
@@ -431,7 +430,7 @@ async function processAll() {
       }
     }
 
-    if (i < pending.length - 1) await countdown(13, 'Next receipt in');
+    if (i < pending.length - 1) await sleep(1500);
   }
 
   document.getElementById('processBtn').disabled = false;
