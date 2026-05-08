@@ -416,7 +416,7 @@ async function processAll() {
         break;
       }
     }
-    if (i < pending.length - 1) await sleep(1000);
+    if (i < pending.length - 1) await countdown(13);
   }
 
   document.getElementById('processBtn').disabled = false;
@@ -425,6 +425,14 @@ async function processAll() {
 }
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function countdown(seconds) {
+  const el = document.getElementById('processStatus');
+  for (let s = seconds; s > 0; s--) {
+    el.textContent = `Next receipt in ${s}s…`;
+    await sleep(1000);
+  }
+}
 function today()   { return new Date().toLocaleDateString('en-US'); }
 function getMonth(d) { try { return new Date(d).toLocaleString('default',{month:'long'}); } catch { return ''; } }
 
