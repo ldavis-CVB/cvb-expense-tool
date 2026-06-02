@@ -1,5 +1,3 @@
-import sharp from 'sharp';
-
 export const config = {
   api: {
     bodyParser: {
@@ -21,6 +19,7 @@ export default async function handler(req, res) {
   // HEIC conversion — no API key needed
   if (action === 'convert-heic') {
     try {
+      const { default: sharp } = await import('sharp');
       const inputBuf = Buffer.from(data, 'base64');
       const jpegBuf = await sharp(inputBuf)
         .resize({ width: 1000, height: 1000, fit: 'inside', withoutEnlargement: true })
