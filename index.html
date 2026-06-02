@@ -415,37 +415,25 @@ if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc =
 
 // Render a File (image or PDF) to a compressed JPEG base64 string
 function fileToBase64(file) {
-  // HEIC/HEIF — try native browser rendering first (Safari supports it), fall back to heic2any
+  // HEIC/HEIF — convert server-side (works in all browsers)
   if (file.type === 'image/heic' || file.type === 'image/heif' || /\.(heic|heif)$/i.test(file.name)) {
     return new Promise((res, rej) => {
-      const url = URL.createObjectURL(file);
-      const img = new Image();
-      img.onload = () => {
-        URL.revokeObjectURL(url);
-        const MAX_DIM = 700;
-        let w = img.width, h = img.height;
-        if (w > MAX_DIM || h > MAX_DIM) {
-          if (w > h) { h = Math.round(h * MAX_DIM / w); w = MAX_DIM; }
-          else       { w = Math.round(w * MAX_DIM / h); h = MAX_DIM; }
-        }
-        const canvas = document.createElement('canvas');
-        canvas.width = w; canvas.height = h;
-        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        compressCanvas(canvas, res, rej);
+      const reader = new FileReader();
+      reader.onerror = rej;
+      reader.onload = async () => {
+        try {
+          const b64 = btoa(String.fromCharCode(...new Uint8Array(reader.result)));
+          const resp = await fetch('/api/proxy', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ action: 'convert-heic', data: b64 })
+          });
+          const json = await resp.json();
+          if (!resp.ok) throw new Error(json.error || 'HEIC conversion failed');
+          res(json.data);
+        } catch (e) { rej(e); }
       };
-      img.onerror = () => {
-        URL.revokeObjectURL(url);
-        // Native failed — try heic2any
-        if (!window.heic2any) { rej(new Error('HEIC not supported in this browser — try Safari or convert to JPG first')); return; }
-        heic2any({ blob: file, toType: 'image/jpeg', quality: 0.85 })
-          .then(blob => {
-            const b = Array.isArray(blob) ? blob[0] : blob;
-            return fileToBase64(new File([b], file.name.replace(/\.(heic|heif)$/i, '.jpg'), { type: 'image/jpeg' }));
-          })
-          .then(res)
-          .catch(rej);
-      };
-      img.src = url;
+      reader.readAsArrayBuffer(file);
     });
   }
 
