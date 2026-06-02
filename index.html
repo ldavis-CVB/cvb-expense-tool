@@ -637,7 +637,7 @@ function sortExpenses() {
 }
 
 async function addBlankRow() {
-  await addExpenseRow({ date: today(), vendor:'', description:'', amount:'', gl:'200-700905', cat:'Travel', month: getMonth(today()) });
+  await addExpenseRow({ date: today(), vendor:'', description:'', amount: 0, gl:'200-700905', cat:'Travel', month: getMonth(today()) });
 }
 
 async function deleteRow(idx) {
