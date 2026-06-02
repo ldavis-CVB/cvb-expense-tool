@@ -2,8 +2,5 @@
   "name": "cvb-expense-tool",
   "version": "1.0.0",
   "private": true,
-  "type": "module",
-  "dependencies": {
-    "sharp": "^0.33.5"
-  }
+  "type": "module"
 }

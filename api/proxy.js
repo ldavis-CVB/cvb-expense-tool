@@ -16,21 +16,6 @@ export default async function handler(req, res) {
 
   const { action, data, mediaType } = req.body;
 
-  // HEIC conversion — no API key needed
-  if (action === 'convert-heic') {
-    try {
-      const { default: sharp } = await import('sharp');
-      const inputBuf = Buffer.from(data, 'base64');
-      const jpegBuf = await sharp(inputBuf)
-        .resize({ width: 1000, height: 1000, fit: 'inside', withoutEnlargement: true })
-        .jpeg({ quality: 85 })
-        .toBuffer();
-      return res.status(200).json({ data: jpegBuf.toString('base64') });
-    } catch (e) {
-      return res.status(500).json({ error: 'HEIC conversion failed: ' + e.message });
-    }
-  }
-
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) return res.status(500).json({ error: 'API key not configured' });
 
