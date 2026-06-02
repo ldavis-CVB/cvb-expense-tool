@@ -22,14 +22,14 @@ export default async function handler(req, res) {
   let claudeBody;
   if (action === 'test') {
     claudeBody = {
-      model: 'claude-opus-4-5-20251101',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 10,
       messages: [{ role: 'user', content: 'Hi' }]
     };
   } else {
     const isPDF = mediaType === 'application/pdf';
     claudeBody = {
-      model: 'claude-opus-4-5-20251101',
+      model: 'claude-haiku-4-5-20251001',
       max_tokens: 512,
       messages: [{ role: 'user', content: [
         isPDF
