@@ -161,8 +161,8 @@
   <div class="upload-zone" id="uploadZone">
     <div class="icon">&#128196;</div>
     <h2>Drop receipts here or click to browse</h2>
-    <p>Supports JPG, PNG, HEIC, PDF &mdash; upload multiple at once</p>
-    <input type="file" id="fileInput" multiple accept="image/*,.pdf,.heic,.heif" />
+    <p>Supports JPG, PNG, HEIC, PDF, EML &mdash; upload multiple at once</p>
+    <input type="file" id="fileInput" multiple accept="image/*,.pdf,.heic,.heif,.eml" />
   </div>
 
   <div class="queue-section" id="queueSection" style="display:none">
@@ -415,6 +415,28 @@ const MAX_B64_CHARS = 1.2 * 1024 * 1024; // 1.2MB base64
 if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc =
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
+// Extract receipt data from a .eml email file
+async function extractFromEml(file) {
+  const { default: PostalMime } = await import('https://esm.sh/postal-mime');
+  const buffer = await file.arrayBuffer();
+  const email  = await new PostalMime().parse(buffer);
+
+  // Prefer image/PDF attachments — process the first one normally
+  for (const att of (email.attachments || [])) {
+    const mt = att.mimeType || '';
+    if (mt.startsWith('image/') || mt === 'application/pdf') {
+      const blob = new Blob([att.content], { type: mt });
+      const f    = new File([blob], att.filename || 'attachment', { type: mt });
+      return { mode: 'file', file: f };
+    }
+  }
+
+  // Fall back to the email body text
+  const body = email.text || email.html?.replace(/<[^>]+>/g, ' ') || '';
+  if (!body.trim()) throw new Error('No readable content found in email');
+  return { mode: 'text', text: body.slice(0, 8000) };
+}
+
 // Render a File (image or PDF) to a compressed JPEG base64 string
 function fileToBase64(file) {
   // HEIC/HEIF — try native rendering first, then WASM-based heic-decode (all browsers)
@@ -517,6 +539,26 @@ function compressCanvas(canvas, res, rej) {
 }
 
 async function extractReceipt(item) {
+  // .eml files — parse email then either process attachment or send body text
+  if (/\.eml$/i.test(item.file.name)) {
+    const eml = await extractFromEml(item.file);
+    if (eml.mode === 'file') {
+      item = { ...item, file: eml.file };
+    } else {
+      const res = await fetch('/api/proxy', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'extract-text', text: eml.text })
+      });
+      const text = await res.text();
+      if (!res.ok) { let msg = `Server error ${res.status}`; try { msg = JSON.parse(text).error || msg; } catch {} throw new Error(msg); }
+      try { return JSON.parse(text); } catch {}
+      const match = text.match(/\{[\s\S]*\}/);
+      if (match) { try { return JSON.parse(match[0]); } catch {} }
+      return { date: null, vendor: 'Unknown', description: 'Could not read email — please edit manually', amount: null };
+    }
+  }
+
   const base64    = await fileToBase64(item.file);
   // Everything is rendered/compressed to JPEG before sending
   const mediaType = 'image/jpeg';

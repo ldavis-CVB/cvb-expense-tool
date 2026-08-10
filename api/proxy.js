@@ -21,7 +21,15 @@ export default async function handler(req, res) {
 
 
   let claudeBody;
-  if (action === 'test') {
+  if (action === 'extract-text') {
+    claudeBody = {
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 512,
+      messages: [{ role: 'user', content: [
+        { type: 'text', text: `Extract receipt details from this email and return ONLY valid JSON, no markdown: {"date":"MM/DD/YYYY","vendor":"merchant name","description":"brief description","amount":0.00}. Use null if not found.\n\nEmail content:\n${data || req.body.text}` }
+      ]}]
+    };
+  } else if (action === 'test') {
     claudeBody = {
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 10,
