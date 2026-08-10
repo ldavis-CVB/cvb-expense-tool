@@ -646,13 +646,20 @@ function today()   { return new Date().toLocaleDateString('en-US'); }
 function getMonth(d) { try { return new Date(d).toLocaleString('default',{month:'long'}); } catch { return ''; } }
 
 // ── Expense Table ─────────────────────────────────────────────────
+const DEPT200_EXTRA = [
+  { code: '200-700329', name: 'Subscriptions (Wilmington only)' },
+];
+
 function glSelect(selected) {
   const deptGroups = DEPTS.map(d => {
-    const opts = ACCOUNTS.map(a => {
+    const base = ACCOUNTS.map(a => {
       const code = `${d.code}-${a.num}`;
       return `<option value="${code}"${code===selected?' selected':''}>${code} — ${a.name}</option>`;
-    }).join('');
-    return `<optgroup label="${d.code} · ${d.name}">${opts}</optgroup>`;
+    });
+    const extra = d.code === '200' ? DEPT200_EXTRA.map(e =>
+      `<option value="${e.code}"${e.code===selected?' selected':''}>${e.code} — ${e.name}</option>`
+    ) : [];
+    return `<optgroup label="${d.code} · ${d.name}">${[...base, ...extra].join('')}</optgroup>`;
   }).join('');
   const dept600Opts = DEPT600_ACCOUNTS.map(a => {
     const code = `600-${a.num}`;
