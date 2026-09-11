@@ -734,71 +734,159 @@ function updateGL(sel) {
 
 function esc(s) { return (s||'').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
-// ── Export — mirrors Blank expense report template ────────────────
+// ── Export — matches Blank expense report 2026 template exactly ───
 function exportToExcel() {
   if (!expenses.length) { showToast('No expenses to export','error'); return; }
 
   const month = expenses[0]?.month || new Date().toLocaleString('default',{month:'long'});
   const year  = new Date().getFullYear();
-  const fmt   = '"$"#,##0.00';
-
-  // Build rows as plain arrays — no styles, guaranteed to work
-  const rows = [];
-  const push = (arr) => rows.push(arr);
-
-  push(['Expense Report','','','','','','','','']);
-  push(['Wilmington & Beaches CVB','','','','Employee Name:','',currentStaff||'','','']);
-  push(['Purpose of Travel:','','','','','','','','']);
-  push(['Period Covered:','',`${month} ${year}`,'','','','','','']);
-  push(['','','','','','','','','']);
-  push(['','','Transportation','','','','','','']);
-  push(['Date','Explanation','Miles','Other','Hotel','Meals','Other','Total','GL Code']);
-
-  let totalHotel=0, totalMeals=0, totalOther=0, totalAll=0, totalCC=0;
-
-  expenses.forEach(e => {
-    const amt = parseFloat(e.amount) || 0;
-    const row = [e.date, `${e.vendor} - ${e.description}`, '', '', '', '', '', amt, e.gl||''];
-    if      (e.gl==='200-700820') { row[4]=amt; totalHotel+=amt; }
-    else if (e.gl==='200-700810') { row[5]=amt; totalMeals+=amt; }
-    else                          { row[6]=amt; totalOther+=amt; }
-    totalAll += amt;
-    if ((e.payment||'Bureau CC')!=='Personal') totalCC+=amt;
-    push(row);
-  });
-
-  // Pad to row 32
-  while (rows.length < 31) push(['','','','','','','','','']);
-
-  push(['','Visa Charges','','','','','','','']);
-  push([`Mileage Rate $0.560`,' Total Miles','','','','','','','']);
-  push(['',' Total Amount','','',totalHotel,totalMeals,totalOther,totalAll,'']);
-  push(['Method of Payment:','','','Advance Received:','','','',0,'']);
-  push(['Bureau Credit Card Charge','',totalCC,'Deduct Expense on this Report:','','','',0,'']);
-  push(['Personal: Cash/Check/CC','','','Balance due CVB:','','','',0,'']);
-  push(['','','','Balance due Employee:','','','','','']);
-  push(['','','','','','','','','']);
-  push(['','','','','','','','','']);
-  push(['I certify that the above expenses have','','','','Expense voucher audited by:','','','','']);
-  push(['Been incurred on behalf of the Cape','','','','Date__________________________','','','','']);
-  push(['Fear CVB:','','','','','','','','']);
-  push(['Employee__________________________','','','','Date___________________________','','','','']);
-  push(['Dept. Supervisor____________________','','','','Date___________________________','','','','']);
-  push(['President__________________________','','','','Date___________________________','','','','']);
-
-  const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws['!cols'] = [{wch:22},{wch:40},{wch:10},{wch:14},{wch:10},{wch:10},{wch:10},{wch:12},{wch:16}];
-  ws['!merges'] = [
-    {s:{r:0,c:0},e:{r:0,c:7}},
-    {s:{r:5,c:2},e:{r:5,c:4}},
-  ];
 
   const wb = XLSX.utils.book_new();
+  const ws = {};
+
+  // ── Style helpers ──────────────────────────────────────────────
+  const TNR      = { name: 'Times New Roman', sz: 12 };
+  const TNR_BOLD = { name: 'Times New Roman', sz: 12, bold: true };
+  const MED = s => ({ top:{style:s}, bottom:{style:s}, left:{style:s}, right:{style:s} });
+  const medBorder  = MED('medium');
+  const thinBorder = MED('thin');
+  const moneyFmt   = '"$"#,##0.00';
+
+  function cell(v, font, border, numFmt, align) {
+    const c = { t: typeof v === 'number' ? 'n' : 's', v, s: {} };
+    if (font)   c.s.font      = font;
+    if (border) c.s.border    = border;
+    if (numFmt) c.s.numFmt    = numFmt;
+    if (align)  c.s.alignment = align;
+    if (typeof v === 'number' && numFmt) c.t = 'n';
+    return c;
+  }
+  function fmla(f, font, border, numFmt) {
+    return { t: 'n', f, s: { font: font||TNR, border: border||{}, numFmt: numFmt||moneyFmt } };
+  }
+  function sc(addr, v, font, border, numFmt, align) { ws[addr] = cell(v, font, border, numFmt, align); }
+  function sf(addr, f, font, border, numFmt)          { ws[addr] = fmla(f, font, border, numFmt); }
+
+  // ── Row 1: Title ───────────────────────────────────────────────
+  sc('A1', 'Expense Report', TNR_BOLD, null, null, { horizontal:'center' });
+
+  // ── Row 2: Org + Employee ──────────────────────────────────────
+  sc('A2', 'Wilmington & Beaches CVB', TNR_BOLD);
+  sc('F2', 'Employee Name: ', TNR_BOLD);
+  sc('G2', currentStaff || '', TNR);
+
+  // ── Rows 3-4: Labels ───────────────────────────────────────────
+  sc('A3', 'Purpose of Travel:', TNR);
+  sc('A4', 'Period Covered:', TNR);
+  sc('C4', `${month} ${year}`, TNR);
+
+  // ── Row 6: Column headers ──────────────────────────────────────
+  const ctr = { horizontal: 'center' };
+  [['A6','Date'],['B6','Explanation'],['C6','Miles'],['D6','Other'],
+   ['E6','Hotels'],['F6','Meals'],['G6','CODE'],['H6','Total']].forEach(([addr, lbl]) => {
+    sc(addr, lbl, TNR_BOLD, medBorder, null, ctr);
+  });
+
+  // ── Rows 7-29: Data rows ───────────────────────────────────────
+  for (let r = 7; r <= 29; r++) {
+    const idx = r - 7;
+    const e   = expenses[idx];
+    const amt = e ? (parseFloat(e.amount) || 0) : null;
+
+    sc(`A${r}`, e ? (e.date||'') : '', TNR, thinBorder);
+    sc(`B${r}`, e ? `${e.vendor||''} - ${e.description||''}` : '', TNR, thinBorder);
+    sc(`C${r}`, '', TNR, thinBorder);
+
+    let dVal='', eVal='', fVal='';
+    if (e && amt !== null) {
+      if      (e.gl==='200-700820') { eVal = amt; }
+      else if (e.gl==='200-700810') { fVal = amt; }
+      else                          { dVal = amt; }
+    }
+    sc(`D${r}`, dVal, TNR, thinBorder, dVal ? moneyFmt : null);
+    sc(`E${r}`, eVal, TNR, thinBorder, eVal ? moneyFmt : null);
+    sc(`F${r}`, fVal, TNR, thinBorder, fVal ? moneyFmt : null);
+    sc(`G${r}`, e ? (e.gl||'') : '', TNR, thinBorder);
+    sf(`H${r}`, `SUM(D${r}:F${r})`, TNR, thinBorder, moneyFmt);
+  }
+
+  // ── Row 30: Visa Charges / Subtotal ───────────────────────────
+  sc('A30', '', TNR, { left:{style:'medium'}, bottom:{style:'medium'}, top:{style:'medium'} });
+  sc('B30', 'Visa Charges', TNR_BOLD, { bottom:{style:'medium'}, top:{style:'medium'} }, null, { horizontal:'right' });
+  // C30:G30 merged — write to C30 only
+  sc('C30', '', TNR, { bottom:{style:'medium'}, top:{style:'medium'} });
+  sf('H30', 'SUM(H7:H29)', TNR_BOLD, medBorder, moneyFmt);
+
+  // ── Row 31: Mileage ────────────────────────────────────────────
+  sc('A31', 0.76, TNR, { left:{style:'medium'}, bottom:{style:'medium'} }, '"$"0.00');
+  sc('B31', ' Total Miles', TNR_BOLD, { bottom:{style:'medium'} });
+  sf('C31', 'SUM(C7:C29)', TNR, { bottom:{style:'medium'} }, '0.0');
+  // D31:G31 merged — write to D31 only
+  sc('D31', '', TNR, { bottom:{style:'medium'} });
+  sf('H31', 'A31*C31', TNR_BOLD, { bottom:{style:'medium'}, left:{style:'medium'}, right:{style:'medium'} }, moneyFmt);
+
+  // ── Row 32: Grand Total ────────────────────────────────────────
+  sc('A32', '', TNR, { left:{style:'medium'}, bottom:{style:'medium'} });
+  sc('B32', ' Total Amount', TNR_BOLD, { bottom:{style:'medium'} });
+  // B32:G32 merged — write to B32 only
+  sf('H32', 'SUM(H30+H31)', TNR_BOLD, { bottom:{style:'medium'}, left:{style:'medium'}, right:{style:'medium'} }, moneyFmt);
+
+  // ── Rows 33-36: Payment section ────────────────────────────────
+  sc('A33', 'Method of Payment:', TNR);
+  sc('D33', 'Advance Received: ', TNR);
+  sc('A34', 'Bureau Credit Card Charge ', TNR);
+  sc('D34', 'Deduct Expense on this Report:', TNR);
+  sc('A35', 'Personal: Cash/Check/CC', TNR);
+  sc('D35', 'Balance due CVB : ', TNR);
+  sc('D36', 'Balance due Employee:  ', TNR);
+
+  // ── Rows 38-43: Certification / Signatures ─────────────────────
+  sc('A38', 'I certify that the above expenses have', TNR);
+  sc('F38', 'Expense voucher audited by:  ', TNR);
+  sc('A39', 'Been incurred on behalf of the Cape', TNR);
+  sc('F39', 'Date__________________________', TNR);
+  sc('A40', 'Fear CVB:', TNR);
+  sc('A41', 'Employee__________________________', TNR);
+  sc('F41', 'Date___________________________', TNR);
+  sc('A42', 'Dept. Supervisor____________________', TNR);
+  sc('F42', 'Date___________________________', TNR);
+  sc('A43', 'President__________________________', TNR);
+  sc('F43', 'Date___________________________', TNR);
+
+  // ── Sheet metadata ─────────────────────────────────────────────
+  ws['!ref'] = 'A1:H43';
+
+  ws['!merges'] = [
+    { s:{r:0,c:0}, e:{r:0,c:7} },   // A1:H1  — Title
+    { s:{r:29,c:2}, e:{r:29,c:6} }, // C30:G30 — Visa Charges label span
+    { s:{r:30,c:3}, e:{r:30,c:6} }, // D31:G31 — Mileage label span
+    { s:{r:31,c:1}, e:{r:31,c:6} }, // B32:G32 — Total Amount label span
+  ];
+
+  ws['!cols'] = [
+    { wch: 10.5 },  // A
+    { wch: 43.5 },  // B
+    { wch: 14.0 },  // C
+    { wch: 15.5 },  // D
+    { wch: 12.0 },  // E
+    { wch: 13.7 },  // F
+    { wch: 27.8 },  // G
+    { wch: 21.0 },  // H
+  ];
+
+  ws['!rows'] = [];
+  ws['!rows'][4]  = { hpt: 17.1 };  // row 5  (0-indexed)
+  ws['!rows'][5]  = { hpt: 18.0 };  // row 6
+  ws['!rows'][29] = { hpt: 18.0 };  // row 30
+  ws['!rows'][30] = { hpt: 18.0 };  // row 31
+  ws['!rows'][31] = { hpt: 18.0 };  // row 32
+  for (let i = 11; i <= 28; i++) ws['!rows'][i] = { hpt: 15.75 }; // rows 12-29
+
   XLSX.utils.book_append_sheet(wb, ws, 'Expense Report');
 
   const filename = `Expense Report - ${currentStaff||'Staff'} - ${month} ${year}.xlsx`;
   try {
-    XLSX.writeFile(wb, filename);
+    XLSX.writeFile(wb, filename, { cellStyles: true });
     showToast(`Downloaded: ${filename}`, 'success');
   } catch(e) {
     showToast('Export error: ' + e.message, 'error');
