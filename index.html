@@ -438,7 +438,8 @@ async function extractFromEml(file) {
 }
 
 // Render a File (image or PDF) to a compressed JPEG base64 string
-function fileToBase64(file) {
+function fileToBase64(file, pageNum) {
+  pageNum = pageNum || 1;
   // HEIC/HEIF — try native rendering first, then WASM-based heic-decode (all browsers)
   if (file.type === 'image/heic' || file.type === 'image/heif' || /\.(heic|heif)$/i.test(file.name)) {
     return new Promise((res, rej) => {
@@ -496,7 +497,7 @@ function fileToBase64(file) {
           pdfjsLib.GlobalWorkerOptions.workerSrc =
             'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
           const pdf  = await pdfjsLib.getDocument({ data: new Uint8Array(reader.result) }).promise;
-          const page = await pdf.getPage(1);
+          const page = await pdf.getPage(pageNum);
           const vp0  = page.getViewport({ scale: 1 });
           const scale = Math.min(1000 / vp0.width, 1000 / vp0.height, 2);
           const vp   = page.getViewport({ scale });
@@ -559,7 +560,7 @@ async function extractReceipt(item) {
     }
   }
 
-  const base64    = await fileToBase64(item.file);
+  const base64    = await fileToBase64(item.file, 1);
   // Everything is rendered/compressed to JPEG before sending
   const mediaType = 'image/jpeg';
 
@@ -590,6 +591,32 @@ function isRateLimit(msg) {
   return m.includes('rate') || m.includes('429') || m.includes('529') || m.includes('overload') || m.includes('limit') || m.includes('exceeded');
 }
 
+// For multi-page PDFs: render all pages, let Claude decide how many receipts exist
+async function extractMultiPagePDF(file) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  const buf = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buf) }).promise;
+  if (pdf.numPages < 2) return null; // single page — use normal flow
+
+  const pages = [];
+  for (let p = 1; p <= Math.min(pdf.numPages, 20); p++) {
+    pages.push(await fileToBase64(file, p));
+  }
+
+  const res = await fetch('/api/proxy', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ action: 'extract-multi', pages })
+  });
+  const text = await res.text();
+  if (!res.ok) { let msg = `Server error ${res.status}`; try { msg = JSON.parse(text).error || msg; } catch {} throw new Error(msg); }
+
+  const arr = text.match(/\[[\s\S]*\]/);
+  if (arr) { try { return JSON.parse(arr[0]); } catch {} }
+  return null;
+}
+
 async function processAll() {
   const pending = fileQueue.filter(f => f.status === 'pending');
   if (!pending.length) { showToast('No new receipts to process','error'); return; }
@@ -606,6 +633,23 @@ async function processAll() {
         attempt === 0 ? `Processing ${i+1} of ${pending.length}…`
                       : `Retrying ${i+1} of ${pending.length}…`;
       try {
+        // Multi-page PDFs: let Claude identify how many separate receipts exist
+        if (item.file.type === 'application/pdf') {
+          const multi = await extractMultiPagePDF(item.file);
+          if (multi && multi.length > 0) {
+            item.status = 'done'; renderQueue();
+            for (const extracted of multi) {
+              const vendor = extracted.vendor || item.file.name;
+              const desc   = extracted.description || '';
+              const gl     = getGL(vendor, desc);
+              await addExpenseRow({ date: extracted.date || today(), vendor, description: desc, amount: extracted.amount || 0, gl: gl.code, cat: gl.cat, month: getMonth(extracted.date) });
+            }
+            success = true;
+            break;
+          }
+          // Falls through to single-page extraction if multi returns null (1-page PDF)
+        }
+
         const extracted = await extractReceipt(item);
         item.status = 'done'; renderQueue();
         const vendor = extracted.vendor || item.file.name;

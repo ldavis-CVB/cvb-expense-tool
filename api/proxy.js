@@ -21,7 +21,17 @@ export default async function handler(req, res) {
 
 
   let claudeBody;
-  if (action === 'extract-text') {
+  if (action === 'extract-multi') {
+    const pages = req.body.pages || [];
+    claudeBody = {
+      model: 'claude-sonnet-4-6',
+      max_tokens: 1024,
+      messages: [{ role: 'user', content: [
+        ...pages.map(p => ({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: p } })),
+        { type: 'text', text: 'These are pages from a scanned PDF. Use your best judgment to identify how many SEPARATE receipts or invoices are in this document — a single receipt may span multiple pages, and not every page break means a new receipt. Return ONLY a JSON array, one object per distinct receipt, no markdown:\n[{"date":"MM/DD/YYYY","vendor":"merchant name","description":"brief description","amount":0.00},...]' }
+      ]}]
+    };
+  } else if (action === 'extract-text') {
     claudeBody = {
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 512,
