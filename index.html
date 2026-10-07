@@ -831,8 +831,9 @@ function exportToExcel() {
     sc(addr, lbl, TNR_BOLD, medBorder, null, ctr);
   });
 
-  // ── Rows 7-29: Data rows ───────────────────────────────────────
-  for (let r = 7; r <= 29; r++) {
+  // ── Rows 7+: Data rows (dynamic count) ────────────────────────
+  const lastDataRow = Math.max(29, 6 + expenses.length);
+  for (let r = 7; r <= lastDataRow; r++) {
     const idx = r - 7;
     const e   = expenses[idx];
     const amt = e ? (parseFloat(e.amount) || 0) : null;
@@ -854,57 +855,70 @@ function exportToExcel() {
     sf(`H${r}`, `SUM(D${r}:F${r})`, TNR, thinBorder, moneyFmt);
   }
 
-  // ── Row 30: Visa Charges / Subtotal ───────────────────────────
-  sc('A30', '', TNR, { left:{style:'medium'}, bottom:{style:'medium'}, top:{style:'medium'} });
-  sc('B30', 'Visa Charges', TNR_BOLD, { bottom:{style:'medium'}, top:{style:'medium'} }, null, { horizontal:'right' });
-  // C30:G30 merged — write to C30 only
-  sc('C30', '', TNR, { bottom:{style:'medium'}, top:{style:'medium'} });
-  sf('H30', 'SUM(H7:H29)', TNR_BOLD, medBorder, moneyFmt);
+  // ── Totals rows (dynamic position) ────────────────────────────
+  const rVisa  = lastDataRow + 1;
+  const rMile  = lastDataRow + 2;
+  const rTotal = lastDataRow + 3;
+  const rPay1  = lastDataRow + 4;
+  const rPay2  = lastDataRow + 5;
+  const rPay3  = lastDataRow + 6;
+  const rPay4  = lastDataRow + 7;
+  const rSig1  = lastDataRow + 9;
+  const rSig2  = lastDataRow + 10;
+  const rSig3  = lastDataRow + 11;
+  const rSig4  = lastDataRow + 12;
+  const rSig5  = lastDataRow + 13;
+  const rSig6  = lastDataRow + 14;
+  const rLast  = lastDataRow + 14;
 
-  // ── Row 31: Mileage ────────────────────────────────────────────
-  sc('A31', 0.76, TNR, { left:{style:'medium'}, bottom:{style:'medium'} }, '"$"0.00');
-  sc('B31', ' Total Miles', TNR_BOLD, { bottom:{style:'medium'} });
-  sf('C31', 'SUM(C7:C29)', TNR, { bottom:{style:'medium'} }, '0.0');
-  // D31:G31 merged — write to D31 only
-  sc('D31', '', TNR, { bottom:{style:'medium'} });
-  sf('H31', 'A31*C31', TNR_BOLD, { bottom:{style:'medium'}, left:{style:'medium'}, right:{style:'medium'} }, moneyFmt);
+  // Visa Charges / Subtotal
+  sc(`A${rVisa}`, '', TNR, { left:{style:'medium'}, bottom:{style:'medium'}, top:{style:'medium'} });
+  sc(`B${rVisa}`, 'Visa Charges', TNR_BOLD, { bottom:{style:'medium'}, top:{style:'medium'} }, null, { horizontal:'right' });
+  sc(`C${rVisa}`, '', TNR, { bottom:{style:'medium'}, top:{style:'medium'} });
+  sf(`H${rVisa}`, `SUM(H7:H${lastDataRow})`, TNR_BOLD, medBorder, moneyFmt);
 
-  // ── Row 32: Grand Total ────────────────────────────────────────
-  sc('A32', '', TNR, { left:{style:'medium'}, bottom:{style:'medium'} });
-  sc('B32', ' Total Amount', TNR_BOLD, { bottom:{style:'medium'} });
-  // B32:G32 merged — write to B32 only
-  sf('H32', 'SUM(H30+H31)', TNR_BOLD, { bottom:{style:'medium'}, left:{style:'medium'}, right:{style:'medium'} }, moneyFmt);
+  // Mileage
+  sc(`A${rMile}`, 0.76, TNR, { left:{style:'medium'}, bottom:{style:'medium'} }, '"$"0.00');
+  sc(`B${rMile}`, ' Total Miles', TNR_BOLD, { bottom:{style:'medium'} });
+  sf(`C${rMile}`, `SUM(C7:C${lastDataRow})`, TNR, { bottom:{style:'medium'} }, '0.0');
+  sc(`D${rMile}`, '', TNR, { bottom:{style:'medium'} });
+  sf(`H${rMile}`, `A${rMile}*C${rMile}`, TNR_BOLD, { bottom:{style:'medium'}, left:{style:'medium'}, right:{style:'medium'} }, moneyFmt);
 
-  // ── Rows 33-36: Payment section ────────────────────────────────
-  sc('A33', 'Method of Payment:', TNR);
-  sc('D33', 'Advance Received: ', TNR);
-  sc('A34', 'Bureau Credit Card Charge ', TNR);
-  sc('D34', 'Deduct Expense on this Report:', TNR);
-  sc('A35', 'Personal: Cash/Check/CC', TNR);
-  sc('D35', 'Balance due CVB : ', TNR);
-  sc('D36', 'Balance due Employee:  ', TNR);
+  // Grand Total
+  sc(`A${rTotal}`, '', TNR, { left:{style:'medium'}, bottom:{style:'medium'} });
+  sc(`B${rTotal}`, ' Total Amount', TNR_BOLD, { bottom:{style:'medium'} });
+  sf(`H${rTotal}`, `SUM(H${rVisa}+H${rMile})`, TNR_BOLD, { bottom:{style:'medium'}, left:{style:'medium'}, right:{style:'medium'} }, moneyFmt);
 
-  // ── Rows 38-43: Certification / Signatures ─────────────────────
-  sc('A38', 'I certify that the above expenses have', TNR);
-  sc('F38', 'Expense voucher audited by:  ', TNR);
-  sc('A39', 'Been incurred on behalf of the Cape', TNR);
-  sc('F39', 'Date__________________________', TNR);
-  sc('A40', 'Fear CVB:', TNR);
-  sc('A41', 'Employee__________________________', TNR);
-  sc('F41', 'Date___________________________', TNR);
-  sc('A42', 'Dept. Supervisor____________________', TNR);
-  sc('F42', 'Date___________________________', TNR);
-  sc('A43', 'President__________________________', TNR);
-  sc('F43', 'Date___________________________', TNR);
+  // Payment section
+  sc(`A${rPay1}`, 'Method of Payment:', TNR);
+  sc(`D${rPay1}`, 'Advance Received: ', TNR);
+  sc(`A${rPay2}`, 'Bureau Credit Card Charge ', TNR);
+  sc(`D${rPay2}`, 'Deduct Expense on this Report:', TNR);
+  sc(`A${rPay3}`, 'Personal: Cash/Check/CC', TNR);
+  sc(`D${rPay3}`, 'Balance due CVB : ', TNR);
+  sc(`D${rPay4}`, 'Balance due Employee:  ', TNR);
+
+  // Certification / Signatures
+  sc(`A${rSig1}`, 'I certify that the above expenses have', TNR);
+  sc(`F${rSig1}`, 'Expense voucher audited by:  ', TNR);
+  sc(`A${rSig2}`, 'Been incurred on behalf of the Cape', TNR);
+  sc(`F${rSig2}`, 'Date__________________________', TNR);
+  sc(`A${rSig3}`, 'Fear CVB:', TNR);
+  sc(`A${rSig4}`, 'Employee__________________________', TNR);
+  sc(`F${rSig4}`, 'Date___________________________', TNR);
+  sc(`A${rSig5}`, 'Dept. Supervisor____________________', TNR);
+  sc(`F${rSig5}`, 'Date___________________________', TNR);
+  sc(`A${rSig6}`, 'President__________________________', TNR);
+  sc(`F${rSig6}`, 'Date___________________________', TNR);
 
   // ── Sheet metadata ─────────────────────────────────────────────
-  ws['!ref'] = 'A1:H43';
+  ws['!ref'] = `A1:H${rLast}`;
 
   ws['!merges'] = [
-    { s:{r:0,c:0}, e:{r:0,c:7} },   // A1:H1  — Title
-    { s:{r:29,c:2}, e:{r:29,c:6} }, // C30:G30 — Visa Charges label span
-    { s:{r:30,c:3}, e:{r:30,c:6} }, // D31:G31 — Mileage label span
-    { s:{r:31,c:1}, e:{r:31,c:6} }, // B32:G32 — Total Amount label span
+    { s:{r:0,c:0}, e:{r:0,c:7} },                           // A1:H1 — Title
+    { s:{r:rVisa-1,c:2}, e:{r:rVisa-1,c:6} },               // C:G — Visa Charges label span
+    { s:{r:rMile-1,c:3}, e:{r:rMile-1,c:6} },               // D:G — Mileage label span
+    { s:{r:rTotal-1,c:1}, e:{r:rTotal-1,c:6} },             // B:G — Total Amount label span
   ];
 
   ws['!cols'] = [
@@ -919,12 +933,12 @@ function exportToExcel() {
   ];
 
   ws['!rows'] = [];
-  ws['!rows'][4]  = { hpt: 17.1 };  // row 5  (0-indexed)
-  ws['!rows'][5]  = { hpt: 18.0 };  // row 6
-  ws['!rows'][29] = { hpt: 18.0 };  // row 30
-  ws['!rows'][30] = { hpt: 18.0 };  // row 31
-  ws['!rows'][31] = { hpt: 18.0 };  // row 32
-  for (let i = 11; i <= 28; i++) ws['!rows'][i] = { hpt: 15.75 }; // rows 12-29
+  ws['!rows'][4] = { hpt: 17.1 };  // row 5 (0-indexed)
+  ws['!rows'][5] = { hpt: 18.0 };  // row 6
+  ws['!rows'][rVisa-1]  = { hpt: 18.0 };
+  ws['!rows'][rMile-1]  = { hpt: 18.0 };
+  ws['!rows'][rTotal-1] = { hpt: 18.0 };
+  for (let i = 6; i < lastDataRow; i++) ws['!rows'][i] = { hpt: 15.75 };
 
   XLSX.utils.book_append_sheet(wb, ws, 'Expense Report');
 
